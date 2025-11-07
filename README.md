@@ -149,6 +149,7 @@ See [docs/EXAMPLES.md](./docs/EXAMPLES.md) for:
 - [docs/EXAMPLES.md](./docs/EXAMPLES.md) - Usage patterns, real-world scenarios, and best practices
 - [docs/COMPARISON.md](./docs/COMPARISON.md) - How Planear compares to Terraform, Pulumi, Liquibase
 - [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute
+- [docs/RELEASING.md](./docs/RELEASING.md) - How to create releases (automatic via GitHub Actions)
 
 ## Use Cases
 
