@@ -3,10 +3,11 @@ name: Tests and Coverage
 on:
   push:
     branches:
-      - '**'
-  pull_request:
-    branches:
-      - main
+      - 'feat/**'
+      - 'feature/**'
+      - 'JIRA/**'
+    paths:
+      - pkg/**
 
 permissions:
   contents: read

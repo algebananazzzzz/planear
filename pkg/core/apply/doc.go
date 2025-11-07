@@ -84,9 +84,9 @@
 // Failed operations are automatically retried with exponential backoff:
 //
 //   - First retry: 100ms delay
-//	  - Second retry: 200ms delay
-//	  - Third retry: 400ms delay
-//	  - Further retries: exponential backoff up to reasonable limits
+//   - Second retry: 200ms delay
+//   - Third retry: 400ms delay
+//   - Further retries: exponential backoff up to reasonable limits
 //
 // After all retries are exhausted, the operation is marked as failed in the report.
 //
