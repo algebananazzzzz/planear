@@ -7,7 +7,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   release:
@@ -18,29 +17,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install semantic-release
-        run: npm install -g semantic-release @semantic-release/changelog @semantic-release/git
-
-      - name: Run semantic-release
+      - name: Bump version and create tag
+        id: tag_version
+        uses: anothrNick/github-tag-action@1.67.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: semantic-release
+          WITH_V: true
+          DEFAULT_BUMP: patch
+          RELEASE_BRANCHES: main
+          PRERELEASE: false
+
+      - name: Create GitHub release
+        if: steps.tag_version.outputs.new_tag != ''
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.tag_version.outputs.new_tag }}
+          name: Release ${{ steps.tag_version.outputs.new_tag }}
+          body: |
+            ## Changes in ${{ steps.tag_version.outputs.new_tag }}
+
+            Previous version: ${{ steps.tag_version.outputs.tag }}
+
+            See commit history for details: https://github.com/${{ github.repository }}/compare/${{ steps.tag_version.outputs.tag }}...${{ steps.tag_version.outputs.new_tag }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Release summary
-        if: always()
         run: |
-          echo "✅ Semantic release workflow completed"
+          echo "✅ Release workflow completed"
           echo ""
-          echo "Release process:"
-          echo "1. Analyzed commit history using conventional commits"
-          echo "2. Determined new version (major.minor.patch)"
-          echo "3. Generated changelog"
-          echo "4. Created git tag"
-          echo "5. Created GitHub release"
+          echo "Previous tag: ${{ steps.tag_version.outputs.tag }}"
+          echo "New tag: ${{ steps.tag_version.outputs.new_tag }}"
+          echo "Part: ${{ steps.tag_version.outputs.part }}"
           echo ""
-          echo "📍 View releases: https://github.com/${{ github.repository }}/releases"
+          echo "📍 Release: https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag_version.outputs.new_tag }}"
+          echo "📦 Package: https://pkg.go.dev/github.com/algebananazzzzz/planear@${{ steps.tag_version.outputs.new_tag }}"
