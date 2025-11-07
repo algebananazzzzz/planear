@@ -4,18 +4,21 @@ This document explains how to create new releases for Planear.
 
 ## Automatic Release Process
 
-Planear uses GitHub Actions to automatically create tags and releases when changes are merged to `main`.
+Planear uses GitHub Actions to automatically create tags and releases when the VERSION file is updated on `main`.
 
 ### How It Works
 
 1. **Developer updates VERSION file** with new semantic version
-2. **Developer updates CHANGELOG.md** with release notes
-3. **Changes merged to main** via pull request
-4. **GitHub Actions automatically**:
-   - Detects VERSION file change
+2. **Changes merged to main** via pull request
+3. **GitHub Actions automatically**:
+   - Detects new VERSION on main branch
+   - Parses commits since last tag using conventional commits
+   - Generates changelog from commit messages
    - Creates git tag (e.g., `v1.0.1`)
-   - Creates GitHub release with changelog
+   - Creates GitHub release with auto-generated changelog
    - Tags are pushed to repository
+
+No CHANGELOG.md file updates needed—the release notes are generated from your commit messages!
 
 ### Release Steps for Developers
 
@@ -38,34 +41,43 @@ Edit `VERSION` file and bump version using semantic versioning:
 - **MINOR** (0.X.0): New features (backward compatible)
 - **PATCH** (0.0.X): Bug fixes
 
-#### 3. Update CHANGELOG.md
+#### 3. Ensure Conventional Commits
 
-Add new section at the top with release notes:
+Make sure your commit messages follow the conventional commit format so the changelog auto-generates correctly:
 
-```markdown
-## [1.1.0] - 2024-11-15
-
-### Added
-- New feature description
-- Another feature
-
-### Fixed
-- Bug fix description
-
-### Changed
-- Breaking change description (if any)
-
-## [1.0.0] - 2024-11-08
-...
+```
+feat(core): add new streaming API          # Appears in Features
+fix(retry): fix exponential backoff bug    # Appears in Bug Fixes
+docs: update README                        # Appears in Documentation
+perf(diff): optimize comparison algorithm  # Appears in Performance
+refactor: simplify error handling          # Appears in Refactoring
 ```
 
-**Section Types:**
-- `Added` - New features
-- `Fixed` - Bug fixes
-- `Changed` - Changes in existing functionality
-- `Deprecated` - Soon-to-be removed features
-- `Removed` - Removed features
-- `Security` - Security-related changes
+**Commit Format:**
+```
+<type>(<scope>): <subject>
+
+<body>
+
+<footer>
+```
+
+**Types:**
+- `feat` - New features
+- `fix` - Bug fixes
+- `docs` - Documentation
+- `perf` - Performance improvements
+- `refactor` - Code refactoring
+- `test` - Test changes
+- `chore` - Maintenance
+
+**Breaking Changes:**
+Include `BREAKING CHANGE:` in commit footer to mark breaking changes:
+```
+feat(api): change callback signature
+
+BREAKING CHANGE: OnFinalize now accepts context parameter
+```
 
 #### 4. Run Pre-Release Checks
 
@@ -88,7 +100,7 @@ go mod tidy
 #### 5. Commit Changes
 
 ```bash
-git add VERSION CHANGELOG.md
+git add VERSION
 git commit -m "chore: release v1.1.0"
 ```
 
@@ -109,18 +121,25 @@ Then on GitHub:
 #### 7. Merge to Main
 
 Once approved, merge the PR:
-- GitHub Actions detects VERSION change
-- Automatically creates tag `v1.1.0`
-- Automatically creates GitHub release
+- GitHub Actions detects VERSION change on main
+- Automatically parses commits since last tag
+- Generates changelog from conventional commits
+- Creates tag `v1.1.0`
+- Creates GitHub release with auto-generated changelog
 - Release is now live! 🎉
 
 ## Workflow Triggers
 
 The release workflow triggers on:
 - **Push to main branch**
-- **AND changes to VERSION or CHANGELOG.md**
 
-So if you only commit code changes without updating VERSION/CHANGELOG, no release is created (which is correct for pre-release work).
+And automatically:
+1. Reads the VERSION file
+2. Checks if that version tag already exists
+3. If not, generates changelog from commits since last tag
+4. Creates release
+
+This means every push to main is checked, but only new VERSION changes trigger releases.
 
 ## Checking Release Status
 
@@ -168,16 +187,19 @@ gh release create vX.Y.Z --notes "See CHANGELOG.md"
 1.0.1
 ```
 
-**CHANGELOG.md:**
-```markdown
+**Commits since v1.0.0:**
+```
+fix(retry): fix off-by-one error in exponential backoff
+fix(logging): show correct attempt numbers in retry logs
+```
+
+Changelog automatically generated:
+```
 ## [1.0.1] - 2024-11-15
 
-### Fixed
-- Retry logging now shows correct attempt numbers
-- Fixed off-by-one error in exponential backoff calculation
-
-## [1.0.0] - 2024-11-08
-...
+### 🐛 Bug Fixes
+- fix(retry): fix off-by-one error in exponential backoff
+- fix(logging): show correct attempt numbers in retry logs
 ```
 
 ### Example 2: Feature Release (v1.1.0)
@@ -187,19 +209,23 @@ gh release create vX.Y.Z --notes "See CHANGELOG.md"
 1.1.0
 ```
 
-**CHANGELOG.md:**
-```markdown
+**Commits since v1.0.0:**
+```
+feat(apply): add new --parallel flag for apply command
+feat(validation): support custom validators in CSV loading
+fix(pool): memory leak in worker pool cleanup
+```
+
+Changelog automatically generated:
+```
 ## [1.1.0] - 2024-11-20
 
-### Added
-- New `--parallel` flag for apply command
-- Support for custom validators in CSV loading
+### ✨ Features
+- feat(apply): add new --parallel flag for apply command
+- feat(validation): support custom validators in CSV loading
 
-### Fixed
-- Memory leak in worker pool cleanup
-
-## [1.0.0] - 2024-11-08
-...
+### 🐛 Bug Fixes
+- fix(pool): memory leak in worker pool cleanup
 ```
 
 ### Example 3: Major Release (v2.0.0)
@@ -209,37 +235,43 @@ gh release create vX.Y.Z --notes "See CHANGELOG.md"
 2.0.0
 ```
 
-**CHANGELOG.md:**
-```markdown
+**Commits since v1.0.0:**
+```
+feat(api): new streaming API for large CSV files
+
+BREAKING CHANGE: OnFinalize callback removed (use context cancellation)
+
+feat(core): change FormatRecord signature to return error
+
+BREAKING CHANGE: Changed FormatRecord signature to return error
+```
+
+Changelog automatically generated:
+```
 ## [2.0.0] - 2024-12-01
 
-### Added
-- New streaming API for large CSV files
+### ⚠️ Breaking Changes
+- OnFinalize callback removed (use context cancellation)
+- Changed FormatRecord signature to return error
 
-### Changed
-- **BREAKING**: Removed deprecated OnFinalize callback (use context cancellation)
-- **BREAKING**: Changed FormatRecord signature to return error
-
-### Removed
-- Legacy retry configuration options
-
-## [1.0.0] - 2024-11-08
-...
+### ✨ Features
+- feat(api): new streaming API for large CSV files
+- feat(core): change FormatRecord signature to return error
 ```
 
 ## Release Checklist
 
 - [ ] Code changes complete and tested
-- [ ] Bump VERSION file with semantic version
-- [ ] Update CHANGELOG.md with release notes
+- [ ] Use conventional commits (feat:, fix:, docs:, etc.)
 - [ ] Run `go test ./...` - all pass
 - [ ] Run `go vet ./...` - clean
+- [ ] Bump VERSION file with semantic version
 - [ ] Commit with message `chore: release vX.Y.Z`
 - [ ] Push to release branch
 - [ ] Create and merge PR to main
-- [ ] Verify GitHub Actions workflow runs
-- [ ] Check https://github.com/algebananazzzzz/planear/releases for new release
-- [ ] (Optional) Wait 24-48 hours and verify pkg.go.dev updated
+- [ ] Verify GitHub Actions workflow runs at https://github.com/algebananazzzzz/planear/actions
+- [ ] Check https://github.com/algebananazzzzz/planear/releases for new release with auto-generated changelog
+- [ ] (Optional) Wait 24-48 hours and verify pkg.go.dev updated at https://pkg.go.dev/github.com/algebananazzzzz/planear@vX.Y.Z
 
 ## Questions?
 
