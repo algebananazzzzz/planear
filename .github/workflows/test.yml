@@ -107,9 +107,10 @@ jobs:
 
       - name: Run go fmt
         run: |
-          if [ -n "$(go fmt ./...)" ]; then
+          if [ -n "$(gofmt -l .)" ]; then
             echo "❌ Code formatting issues found. Run 'go fmt ./...'"
-            go fmt -l ./...
+            echo "Files with formatting issues:"
+            gofmt -l .
             exit 1
           fi
           echo "✅ Code formatting is correct"
