@@ -1,5 +1,10 @@
 # Planear
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/algebananazzzzz/planear.svg)](https://pkg.go.dev/github.com/algebananazzzzz/planear)
+[![Go Report Card](https://goreportcard.com/badge/github.com/algebananazzzzz/planear)](https://goreportcard.com/report/github.com/algebananazzzzz/planear)
+[![GitHub Release](https://img.shields.io/github/v/release/algebananazzzzz/planear.svg)](https://github.com/algebananazzzzz/planear/releases)
+[![License](https://img.shields.io/github/license/algebananazzzzz/planear.svg)](LICENSE)
+
 **Planear** is a robust Go library for declarative data and infrastructure reconciliation that puts **you in complete control**. Define your desired state in CSV files, let Planear compare it with your actual remote state, and execute custom reconciliation logic **exactly the way you want it**. Unlike infrastructure-as-code tools that lock you into predefined providers, Planear gives you full customizability through simple Go code—no plugin ecosystem, no provider limitations, just pure Go.
 
 ## Features
