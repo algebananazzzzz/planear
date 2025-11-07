@@ -1,0 +1,9 @@
+email,name,points,demerit_points,profile_photo
+user1@example.com,Alice,100,,https://example.com/photo1.jpg
+user2@example.com,Bob,60,2,https://example.com/photo2.jpg
+user3@example.com,Charlie,75,,https://example.com/photo3.jpg
+user4@example.com,Diana,0,-1,invalid-url
+user5@example.com,Eve,120,,https://example.com/photo5.jpg
+user9@example.com,Ian,45,,https://example.com/photo9.jpg
+user10@example.com,Jane,15,,https://example.com/photo10.jpg
+user6@example.com,Frank,-5,0,https://example.com/photo6.jpg

@@ -1,0 +1,130 @@
+name: Tests and Coverage
+
+on:
+  push:
+    branches:
+      - '**'  # Run on all branch pushes
+    paths:
+      - 'pkg/**'
+      - 'go.mod'
+      - 'go.sum'
+      - '.github/workflows/test.yml'
+  pull_request:
+    branches:
+      - main
+      - master
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Clear test cache
+        run: go clean -testcache
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Generate coverage report
+        run: |
+          echo "## Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Overall Coverage" >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | grep "^total" | awk '{print "- **Total Coverage**: " $3}' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Library Package Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          go tool cover -func=coverage.out | grep "pkg/" | grep -E "(concurrency|core|formatters|input|utils)" | sort >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Library code coverage check
+        run: |
+          go test -coverprofile=coverage_lib.out \
+            ./pkg/concurrency \
+            ./pkg/core/... \
+            ./pkg/formatters \
+            ./pkg/input \
+            ./pkg/utils
+
+          COVERAGE=$(go tool cover -func=coverage_lib.out | grep "^total" | awk '{print $3}' | sed 's/%//')
+          THRESHOLD=95
+
+          echo "Library Code Coverage: $COVERAGE%"
+
+          if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
+            echo "⚠️ Warning: Coverage $COVERAGE% is below target $THRESHOLD%"
+          else
+            echo "✅ Coverage $COVERAGE% meets target $THRESHOLD%"
+          fi
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          verbose: true
+
+      - name: Comment coverage on PR
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const coverage = require('child_process').execSync('go tool cover -func=coverage.out | grep "^total"').toString().trim();
+
+            const comment = `## 📊 Test Coverage Report
+
+            ${coverage}
+
+            **Library Code Coverage (Library packages only):**
+
+            \`\`\`
+            go test -coverprofile=coverage_lib.out ./pkg/concurrency ./pkg/core/... ./pkg/formatters ./pkg/input ./pkg/utils
+            \`\`\`
+
+            See [Testing Guide](./TESTING.md) for coverage details.`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.22'
+
+      - name: Run go fmt
+        run: |
+          if [ -n "$(go fmt ./...)" ]; then
+            echo "❌ Code formatting issues found. Run 'go fmt ./...'"
+            go fmt -l ./...
+            exit 1
+          fi
+          echo "✅ Code formatting is correct"
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Check for race conditions
+        run: go test -race ./...

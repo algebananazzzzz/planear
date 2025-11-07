@@ -1,0 +1,33 @@
+# Output of go coverage tools
+*.out
+coverage.out
+coverage.html
+
+# Go workspace file
+go.work
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Plan files (from examples)
+plan.json
+generated/
+
+# Logs
+*.log
+
+# Plan/apply output
+examples/data/generated/
+examples/data/plan.json
