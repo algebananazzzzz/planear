@@ -156,8 +156,8 @@ func TestExecuteOperations_RetryLoggingWithFormatter(t *testing.T) {
 			}
 			return nil
 		},
-		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
-		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
 	}
 
 	_, err := apply.ExecuteOperations(params)
@@ -209,8 +209,8 @@ func TestExecuteOperations_RetryLoggingAllFailures(t *testing.T) {
 		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
 			return errors.New("always fails")
 		},
-		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
-		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
 	}
 
 	report, err := apply.ExecuteOperations(params)
