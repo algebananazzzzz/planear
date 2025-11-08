@@ -2,6 +2,7 @@ package apply_test
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/algebananazzzzz/planear/pkg/core/apply"
@@ -35,6 +36,7 @@ func TestRun_SuccessfulExecution(t *testing.T) {
 	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", plan)
 
 	var logs []string
+	var mu sync.Mutex
 
 	err := apply.Run(apply.RunParams[Dummy]{
 		PlanFilePath: planFilePath,
@@ -45,24 +47,34 @@ func TestRun_SuccessfulExecution(t *testing.T) {
 			return fmt.Sprintf("Key[%s]", key)
 		},
 		OnAdd: func(add types.RecordAddition[Dummy]) error {
+			mu.Lock()
 			logs = append(logs, "added:"+add.New.ID)
+			mu.Unlock()
 			return nil
 		},
 		OnUpdate: func(upd types.RecordUpdate[Dummy]) error {
+			mu.Lock()
 			logs = append(logs, "updated:"+upd.New.ID)
+			mu.Unlock()
 			return nil
 		},
 		OnDelete: func(del types.RecordDeletion[Dummy]) error {
+			mu.Lock()
 			logs = append(logs, "deleted:"+del.Old.ID)
+			mu.Unlock()
 			return nil
 		},
 		OnFinalize: func() error {
+			mu.Lock()
 			logs = append(logs, "finalized")
+			mu.Unlock()
 			return nil
 		},
 	})
 	assert.NoError(t, err)
 
+	mu.Lock()
+	defer mu.Unlock()
 	assert.ElementsMatch(t, []string{
 		"added:1", "updated:2", "deleted:3", "finalized",
 	}, logs)
@@ -140,6 +152,7 @@ func TestRun_WithoutFinalization(t *testing.T) {
 	planFilePath := testutils.WriteJSONFile(t, dir, "plan_no_finalize.json", plan)
 
 	var logs []string
+	var mu sync.Mutex
 
 	// OnFinalize is nil (not provided)
 	err := apply.Run(apply.RunParams[Dummy]{
@@ -147,7 +160,9 @@ func TestRun_WithoutFinalization(t *testing.T) {
 		FormatRecord: func(d Dummy) string { return d.ID },
 		FormatKey:    func(k string) string { return k },
 		OnAdd: func(add types.RecordAddition[Dummy]) error {
+			mu.Lock()
 			logs = append(logs, "added:"+add.New.ID)
+			mu.Unlock()
 			return nil
 		},
 		OnUpdate: func(_ types.RecordUpdate[Dummy]) error { return nil },
@@ -156,6 +171,8 @@ func TestRun_WithoutFinalization(t *testing.T) {
 	})
 
 	assert.NoError(t, err)
+	mu.Lock()
+	defer mu.Unlock()
 	assert.Contains(t, logs, "added:1")
 }
 
