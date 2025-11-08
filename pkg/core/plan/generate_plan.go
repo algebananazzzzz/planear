@@ -22,6 +22,23 @@ type GenerateParams[T any] struct {
 }
 
 func Generate[T any](params GenerateParams[T]) (*types.Plan[T], error) {
+	// Validate required function parameters
+	if params.ExtractKeyFunc == nil {
+		return nil, fmt.Errorf("ExtractKeyFunc is required")
+	}
+	if params.LoadRemoteRecords == nil {
+		return nil, fmt.Errorf("LoadRemoteRecords is required")
+	}
+	if params.ValidateRecord == nil {
+		return nil, fmt.Errorf("ValidateRecord is required")
+	}
+	if params.FormatRecordFunc == nil {
+		return nil, fmt.Errorf("FormatRecordFunc is required")
+	}
+	if params.FormatKeyFunc == nil {
+		return nil, fmt.Errorf("FormatKeyFunc is required")
+	}
+
 	localRecords, err := input.LoadCSVDirectoryToMap(params.CSVPath, params.ExtractKeyFunc)
 	if err != nil {
 		fmt.Printf("%sfailed to load local CSV records: %v%s", constants.ColorRed, err, constants.ColorReset)

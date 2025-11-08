@@ -218,3 +218,88 @@ func TestGeneratePlan_EmptyCSVDirectory(t *testing.T) {
 	require.Empty(t, result.Additions)
 	require.Empty(t, result.Updates)
 }
+
+func TestGeneratePlan_NilExtractKeyFunc(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    "plan.json",
+		FormatRecordFunc:  formatRecord,
+		FormatKeyFunc:     formatKey,
+		ExtractKeyFunc:    nil, // Nil function
+		LoadRemoteRecords: func() (map[string]Record, error) { return nil, nil },
+		ValidateRecord:    noopValidator,
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ExtractKeyFunc is required")
+}
+
+func TestGeneratePlan_NilLoadRemoteRecords(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    "plan.json",
+		FormatRecordFunc:  formatRecord,
+		FormatKeyFunc:     formatKey,
+		ExtractKeyFunc:    extractKey,
+		LoadRemoteRecords: nil, // Nil function
+		ValidateRecord:    noopValidator,
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "LoadRemoteRecords is required")
+}
+
+func TestGeneratePlan_NilValidateRecord(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    "plan.json",
+		FormatRecordFunc:  formatRecord,
+		FormatKeyFunc:     formatKey,
+		ExtractKeyFunc:    extractKey,
+		LoadRemoteRecords: func() (map[string]Record, error) { return nil, nil },
+		ValidateRecord:    nil, // Nil function
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "ValidateRecord is required")
+}
+
+func TestGeneratePlan_NilFormatRecordFunc(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    "plan.json",
+		FormatRecordFunc:  nil, // Nil function
+		FormatKeyFunc:     formatKey,
+		ExtractKeyFunc:    extractKey,
+		LoadRemoteRecords: func() (map[string]Record, error) { return nil, nil },
+		ValidateRecord:    noopValidator,
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "FormatRecordFunc is required")
+}
+
+func TestGeneratePlan_NilFormatKeyFunc(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    "plan.json",
+		FormatRecordFunc:  formatRecord,
+		FormatKeyFunc:     nil, // Nil function
+		ExtractKeyFunc:    extractKey,
+		LoadRemoteRecords: func() (map[string]Record, error) { return nil, nil },
+		ValidateRecord:    noopValidator,
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "FormatKeyFunc is required")
+}

@@ -158,3 +158,88 @@ func TestRun_WithoutFinalization(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, logs, "added:1")
 }
+
+func TestRun_NilFormatRecord(t *testing.T) {
+	dir := testutils.NewTestDir(t)
+	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", types.Plan[Dummy]{})
+
+	err := apply.Run(apply.RunParams[Dummy]{
+		PlanFilePath: planFilePath,
+		FormatRecord: nil, // Nil function
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(_ types.RecordAddition[Dummy]) error { return nil },
+		OnUpdate:     func(_ types.RecordUpdate[Dummy]) error { return nil },
+		OnDelete:     func(_ types.RecordDeletion[Dummy]) error { return nil },
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "FormatRecord is required")
+}
+
+func TestRun_NilFormatKey(t *testing.T) {
+	dir := testutils.NewTestDir(t)
+	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", types.Plan[Dummy]{})
+
+	err := apply.Run(apply.RunParams[Dummy]{
+		PlanFilePath: planFilePath,
+		FormatRecord: func(d Dummy) string { return d.ID },
+		FormatKey:    nil, // Nil function
+		OnAdd:        func(_ types.RecordAddition[Dummy]) error { return nil },
+		OnUpdate:     func(_ types.RecordUpdate[Dummy]) error { return nil },
+		OnDelete:     func(_ types.RecordDeletion[Dummy]) error { return nil },
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "FormatKey is required")
+}
+
+func TestRun_NilOnAdd(t *testing.T) {
+	dir := testutils.NewTestDir(t)
+	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", types.Plan[Dummy]{})
+
+	err := apply.Run(apply.RunParams[Dummy]{
+		PlanFilePath: planFilePath,
+		FormatRecord: func(d Dummy) string { return d.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        nil, // Nil function
+		OnUpdate:     func(_ types.RecordUpdate[Dummy]) error { return nil },
+		OnDelete:     func(_ types.RecordDeletion[Dummy]) error { return nil },
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnAdd is required")
+}
+
+func TestRun_NilOnUpdate(t *testing.T) {
+	dir := testutils.NewTestDir(t)
+	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", types.Plan[Dummy]{})
+
+	err := apply.Run(apply.RunParams[Dummy]{
+		PlanFilePath: planFilePath,
+		FormatRecord: func(d Dummy) string { return d.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(_ types.RecordAddition[Dummy]) error { return nil },
+		OnUpdate:     nil, // Nil function
+		OnDelete:     func(_ types.RecordDeletion[Dummy]) error { return nil },
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnUpdate is required")
+}
+
+func TestRun_NilOnDelete(t *testing.T) {
+	dir := testutils.NewTestDir(t)
+	planFilePath := testutils.WriteJSONFile(t, dir, "plan.json", types.Plan[Dummy]{})
+
+	err := apply.Run(apply.RunParams[Dummy]{
+		PlanFilePath: planFilePath,
+		FormatRecord: func(d Dummy) string { return d.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(_ types.RecordAddition[Dummy]) error { return nil },
+		OnUpdate:     func(_ types.RecordUpdate[Dummy]) error { return nil },
+		OnDelete:     nil, // Nil function
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnDelete is required")
+}

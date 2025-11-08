@@ -52,12 +52,14 @@ func TestExecuteOperations(t *testing.T) {
 	}
 
 	var executed []string
+	parallelism := 1 // Sequential execution to verify order
 	params := apply.ExecuteOperationsParams[MockRecord]{
 		Plan: plan,
 		FormatRecord: func(r MockRecord) string {
 			return fmt.Sprintf("ID: %s, Name: %s", r.ID, r.Name)
 		},
-		FormatKey: func(k string) string { return k },
+		FormatKey:       func(k string) string { return k },
+		Parallelization: &parallelism,
 		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
 			if rec.New.Name == "FailAdd" {
 				return errors.New("simulated add error")
@@ -99,9 +101,10 @@ func TestExecuteOperations(t *testing.T) {
 
 	assert.Len(t, report.Ignores, 1)
 
-	assert.ElementsMatch(t, executed, []string{
-		"add:1", "update:3", "delete:5", "finalize",
-	})
+	// Verify execution order: deletions first, then additions and updates, then finalize
+	assert.Equal(t, []string{
+		"delete:5", "add:1", "update:3", "finalize",
+	}, executed)
 }
 
 func TestExecuteOperations_FinalizeFailure(t *testing.T) {
@@ -238,4 +241,84 @@ func TestExecuteOperations_RetryLoggingAllFailures(t *testing.T) {
 	assert.Contains(t, output, "attempt 3")
 	// Verify red color codes were used
 	assert.Contains(t, output, "\033[31m") // Red color code
+}
+
+func TestExecuteOperations_NilFormatRecord(t *testing.T) {
+	plan := types.Plan[MockRecord]{}
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: nil, // Nil function
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(types.RecordAddition[MockRecord]) error { return nil },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "FormatRecord is required")
+}
+
+func TestExecuteOperations_NilFormatKey(t *testing.T) {
+	plan := types.Plan[MockRecord]{}
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.Name },
+		FormatKey:    nil, // Nil function
+		OnAdd:        func(types.RecordAddition[MockRecord]) error { return nil },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "FormatKey is required")
+}
+
+func TestExecuteOperations_NilOnAdd(t *testing.T) {
+	plan := types.Plan[MockRecord]{}
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.Name },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        nil, // Nil function
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnAdd is required")
+}
+
+func TestExecuteOperations_NilOnUpdate(t *testing.T) {
+	plan := types.Plan[MockRecord]{}
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.Name },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(types.RecordAddition[MockRecord]) error { return nil },
+		OnUpdate:     nil, // Nil function
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnUpdate is required")
+}
+
+func TestExecuteOperations_NilOnDelete(t *testing.T) {
+	plan := types.Plan[MockRecord]{}
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.Name },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(types.RecordAddition[MockRecord]) error { return nil },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     nil, // Nil function
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "OnDelete is required")
 }

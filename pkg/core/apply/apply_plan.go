@@ -21,6 +21,23 @@ type RunParams[T any] struct {
 }
 
 func Run[T any](params RunParams[T]) error {
+	// Validate required function parameters
+	if params.FormatRecord == nil {
+		return fmt.Errorf("FormatRecord is required")
+	}
+	if params.FormatKey == nil {
+		return fmt.Errorf("FormatKey is required")
+	}
+	if params.OnAdd == nil {
+		return fmt.Errorf("OnAdd is required")
+	}
+	if params.OnUpdate == nil {
+		return fmt.Errorf("OnUpdate is required")
+	}
+	if params.OnDelete == nil {
+		return fmt.Errorf("OnDelete is required")
+	}
+
 	// Load plan from file
 	var plan types.Plan[T]
 	if err := utils.ParseJSONFile(params.PlanFilePath, "plan file", &plan); err != nil {
