@@ -2,6 +2,7 @@ package apply
 
 import (
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/algebananazzzzz/planear/pkg/concurrency"
@@ -22,6 +23,23 @@ type ExecuteOperationsParams[T any] struct {
 }
 
 func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.ExecutionReport[T], error) {
+	// Validate required function parameters
+	if params.FormatRecord == nil {
+		return nil, fmt.Errorf("FormatRecord is required")
+	}
+	if params.FormatKey == nil {
+		return nil, fmt.Errorf("FormatKey is required")
+	}
+	if params.OnAdd == nil {
+		return nil, fmt.Errorf("OnAdd is required")
+	}
+	if params.OnUpdate == nil {
+		return nil, fmt.Errorf("OnUpdate is required")
+	}
+	if params.OnDelete == nil {
+		return nil, fmt.Errorf("OnDelete is required")
+	}
+
 	var success types.Plan[T]
 	var failure types.Plan[T]
 	var tasks []concurrency.Task
@@ -121,18 +139,19 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 		}
 	}
 
+	// Execute deletions first to free up resources/identifiers before additions/updates
+	for _, del := range params.Plan.Deletions {
+		tasks = append(tasks, deleteTask(del))
+	}
 	for _, rec := range params.Plan.Additions {
 		tasks = append(tasks, addTask(rec))
 	}
 	for _, upd := range params.Plan.Updates {
 		tasks = append(tasks, updateTask(upd))
 	}
-	for _, del := range params.Plan.Deletions {
-		tasks = append(tasks, deleteTask(del))
-	}
 
 	if params.Parallelization == nil {
-		defaultParallelism := 2
+		defaultParallelism := runtime.NumCPU()
 		params.Parallelization = &defaultParallelism
 	}
 
