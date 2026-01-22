@@ -77,6 +77,8 @@ func TestGeneratePlan_EmptyPlan(t *testing.T) {
 		"2": {ID: "2", Value: "SameToo"},
 	}
 
+	testutils.WriteJSONFile(t, tmpDir, "plan.json", map[string]string{"status": "stale"})
+
 	params := plan.GenerateParams[Record]{
 		CSVPath:          tmpDir,
 		OutputFilePath:   outputPlanFile,
