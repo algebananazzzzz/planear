@@ -2,6 +2,7 @@ package plan
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/algebananazzzzz/planear/pkg/constants"
 	"github.com/algebananazzzzz/planear/pkg/core/diff"
@@ -59,6 +60,21 @@ func Generate[T any](params GenerateParams[T]) (*types.Plan[T], error) {
 
 	if plan.IsEmpty() {
 		fmt.Printf("%sNo changes required%s\n", constants.ColorGreen, constants.ColorReset)
+		if params.OutputFilePath != "" {
+			info, err := os.Stat(params.OutputFilePath)
+			if err == nil {
+				if !info.IsDir() {
+					if err := os.Remove(params.OutputFilePath); err != nil {
+						fmt.Printf("%sfailed to remove stale plan file: %v%s\n", constants.ColorRed, err, constants.ColorReset)
+						return nil, fmt.Errorf("failed to remove stale plan file: %v", err)
+					}
+					fmt.Printf("%sWarning: removed stale plan file at %s%s\n", constants.ColorYellow, params.OutputFilePath, constants.ColorReset)
+				}
+			} else if !os.IsNotExist(err) {
+				fmt.Printf("%sfailed to check for stale plan file: %v%s\n", constants.ColorRed, err, constants.ColorReset)
+				return nil, fmt.Errorf("failed to check for stale plan file: %v", err)
+			}
+		}
 		return &plan, nil
 	}
 
