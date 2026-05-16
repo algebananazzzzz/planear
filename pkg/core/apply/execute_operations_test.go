@@ -8,6 +8,7 @@ import (
 	"os"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/algebananazzzzz/planear/pkg/core/apply"
 	"github.com/algebananazzzzz/planear/pkg/types"
@@ -566,4 +567,111 @@ func TestFinalizeOn_AppliesToFlatPath(t *testing.T) {
 		OnFinalize:   func() error { finalizeCalled = true; return nil },
 	})
 	assert.False(t, finalizeCalled, "FinalizeOnSuccess must gate finalize on the flat path as well")
+}
+
+func TestExecuteOperations_LayeredPath_LayerBarrier(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "L0a", New: MockRecord{ID: "L0a"}},
+			{Key: "L0b", New: MockRecord{ID: "L0b"}},
+			{Key: "L1", New: MockRecord{ID: "L1"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "L0a"}, {Kind: types.LayerOpAdd, Key: "L0b"}},
+			{{Kind: types.LayerOpAdd, Key: "L1"}},
+		},
+	}
+
+	var mu sync.Mutex
+	inFlight := map[string]bool{}
+	finished := map[string]bool{}
+	violations := 0
+
+	parallelism := 4
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:            plan,
+		FormatRecord:    func(r MockRecord) string { return r.ID },
+		FormatKey:       func(k string) string { return k },
+		Parallelization: &parallelism,
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			mu.Lock()
+			inFlight[rec.New.ID] = true
+			if rec.New.ID == "L1" {
+				if inFlight["L0a"] && !finished["L0a"] {
+					violations++
+				}
+				if inFlight["L0b"] && !finished["L0b"] {
+					violations++
+				}
+			}
+			mu.Unlock()
+
+			if rec.New.ID == "L0a" || rec.New.ID == "L0b" {
+				time.Sleep(50 * time.Millisecond)
+			}
+
+			mu.Lock()
+			finished[rec.New.ID] = true
+			mu.Unlock()
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.NoError(t, err)
+	assert.Equal(t, 0, violations, "L1 must not start until both L0 ops finish")
+	assert.True(t, finished["L1"])
+}
+
+func TestExecuteOperations_LayeredPath_FailureCascadesToSkipped(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "fails", New: MockRecord{ID: "fails", Name: "always-fails"}},
+			{Key: "skip1", New: MockRecord{ID: "skip1"}},
+			{Key: "skip2", New: MockRecord{ID: "skip2"}},
+		},
+		Deletions: []types.RecordDeletion[MockRecord]{
+			{Key: "skipDel", Old: MockRecord{ID: "skipDel"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "fails"}},
+			{{Kind: types.LayerOpAdd, Key: "skip1"}, {Kind: types.LayerOpAdd, Key: "skip2"}},
+			{{Kind: types.LayerOpDelete, Key: "skipDel"}},
+		},
+	}
+
+	var mu sync.Mutex
+	var attempted []string
+	record := func(s string) { mu.Lock(); attempted = append(attempted, s); mu.Unlock() }
+
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			record("add:" + rec.New.ID)
+			if rec.New.Name == "always-fails" {
+				return errors.New("synthetic")
+			}
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(rec types.RecordDeletion[MockRecord]) error {
+			record("del:" + rec.Old.ID)
+			return nil
+		},
+	}
+
+	report, err := apply.ExecuteOperations(params)
+	assert.NoError(t, err)
+	assert.NotContains(t, attempted, "add:skip1")
+	assert.NotContains(t, attempted, "add:skip2")
+	assert.NotContains(t, attempted, "del:skipDel")
+	assert.Len(t, report.Failure.Additions, 1)
+	assert.Equal(t, "fails", report.Failure.Additions[0].Key)
+	assert.Len(t, report.Skipped.Additions, 2)
+	assert.Len(t, report.Skipped.Deletions, 1)
+	assert.Equal(t, "skipDel", report.Skipped.Deletions[0].Key)
 }

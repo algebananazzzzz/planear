@@ -3,6 +3,7 @@ package apply
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/algebananazzzzz/planear/pkg/concurrency"
@@ -43,6 +44,7 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 
 	var success types.Plan[T]
 	var failure types.Plan[T]
+	var resultsMu sync.Mutex
 	var tasks []concurrency.Task
 
 	// Helper function to retry operations with exponential backoff and logging
@@ -87,10 +89,14 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 				)
 			},
 			OnSuccess: func() {
+				resultsMu.Lock()
 				success.Additions = append(success.Additions, rec)
+				resultsMu.Unlock()
 			},
 			OnFailure: func(err error) {
+				resultsMu.Lock()
 				failure.Additions = append(failure.Additions, rec)
+				resultsMu.Unlock()
 				fmt.Printf("%s[ADD FAILED] Unable to add record: %v\nReason: %s%s\n",
 					constants.ColorRed, params.FormatRecord(rec.New),
 					err, constants.ColorReset)
@@ -108,10 +114,14 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 				)
 			},
 			OnSuccess: func() {
+				resultsMu.Lock()
 				success.Updates = append(success.Updates, upd)
+				resultsMu.Unlock()
 			},
 			OnFailure: func(err error) {
+				resultsMu.Lock()
 				failure.Updates = append(failure.Updates, upd)
+				resultsMu.Unlock()
 				fmt.Printf("%s[UPDATE FAILED] Unable to update record: %v\nReason: %s%s\n",
 					constants.ColorRed, formatters.FormatUpdate(upd, params.FormatKey),
 					err, constants.ColorReset)
@@ -129,10 +139,14 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 				)
 			},
 			OnSuccess: func() {
+				resultsMu.Lock()
 				success.Deletions = append(success.Deletions, del)
+				resultsMu.Unlock()
 			},
 			OnFailure: func(err error) {
+				resultsMu.Lock()
 				failure.Deletions = append(failure.Deletions, del)
+				resultsMu.Unlock()
 				fmt.Printf("%s[Delete Failed] Unable to delete record: %v\nReason: %s%s\n",
 					constants.ColorRed, params.FormatRecord(del.Old),
 					err, constants.ColorReset)
