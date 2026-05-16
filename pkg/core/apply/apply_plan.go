@@ -18,6 +18,7 @@ type RunParams[T any] struct {
 	OnDelete        func(types.RecordDeletion[T]) error
 	OnFinalize      func() error
 	Parallelization *int
+	FinalizeOn      types.FinalizeOn
 }
 
 func Run[T any](params RunParams[T]) error {
@@ -60,6 +61,7 @@ func Run[T any](params RunParams[T]) error {
 		OnDelete:        params.OnDelete,
 		OnFinalize:      params.OnFinalize,
 		Parallelization: params.Parallelization,
+		FinalizeOn:      params.FinalizeOn,
 	})
 
 	// Always print execution report (even if operations or finalization failed)

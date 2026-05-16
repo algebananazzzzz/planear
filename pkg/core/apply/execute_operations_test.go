@@ -440,3 +440,130 @@ func TestExecuteOperations_NilLayers_TakesFlatPath(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, called)
 }
+
+func TestFinalizeOnSuccess_SkipsWhenAnyFailure(t *testing.T) {
+	finalizeCalled := false
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "fail", New: MockRecord{ID: "fail", Name: "always-fails"}},
+			{Key: "skipped", New: MockRecord{ID: "skipped"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "fail"}},
+			{{Kind: types.LayerOpAdd, Key: "skipped"}},
+		},
+	}
+	_, _ = apply.ExecuteOperations(apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		FinalizeOn:   types.FinalizeOnSuccess,
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			if rec.New.Name == "always-fails" {
+				return errors.New("synthetic")
+			}
+			return nil
+		},
+		OnUpdate:   func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:   func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnFinalize: func() error { finalizeCalled = true; return nil },
+	})
+	assert.False(t, finalizeCalled, "FinalizeOnSuccess must skip finalize when any op failed")
+}
+
+func TestFinalizeOnAnySuccess_RunsWhenAtLeastOneSucceeds(t *testing.T) {
+	finalizeCalled := false
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "ok", New: MockRecord{ID: "ok"}},
+			{Key: "fail", New: MockRecord{ID: "fail", Name: "always-fails"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "ok"}},
+			{{Kind: types.LayerOpAdd, Key: "fail"}},
+		},
+	}
+	_, _ = apply.ExecuteOperations(apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		FinalizeOn:   types.FinalizeOnAnySuccess,
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			if rec.New.Name == "always-fails" {
+				return errors.New("synthetic")
+			}
+			return nil
+		},
+		OnUpdate:   func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:   func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnFinalize: func() error { finalizeCalled = true; return nil },
+	})
+	assert.True(t, finalizeCalled, "FinalizeOnAnySuccess must run finalize when at least one op succeeded")
+}
+
+func TestFinalizeOnAnySuccess_SkipsWhenZeroProgress(t *testing.T) {
+	finalizeCalled := false
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "fail", New: MockRecord{ID: "fail", Name: "always-fails"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "fail"}},
+		},
+	}
+	_, _ = apply.ExecuteOperations(apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		FinalizeOn:   types.FinalizeOnAnySuccess,
+		OnAdd:        func(rec types.RecordAddition[MockRecord]) error { return errors.New("synthetic") },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnFinalize:   func() error { finalizeCalled = true; return nil },
+	})
+	assert.False(t, finalizeCalled, "FinalizeOnAnySuccess must skip finalize when zero ops succeeded")
+}
+
+func TestFinalizeAlways_DefaultRunsEvenOnFailure(t *testing.T) {
+	finalizeCalled := false
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "fail", New: MockRecord{ID: "fail", Name: "always-fails"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "fail"}},
+		},
+		// FinalizeOn intentionally unset (zero value = FinalizeAlways)
+	}
+	_, _ = apply.ExecuteOperations(apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(rec types.RecordAddition[MockRecord]) error { return errors.New("synthetic") },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnFinalize:   func() error { finalizeCalled = true; return nil },
+	})
+	assert.True(t, finalizeCalled, "zero-value FinalizeOn (= FinalizeAlways) must always run finalize")
+}
+
+func TestFinalizeOn_AppliesToFlatPath(t *testing.T) {
+	// Flat path (Layers == nil) must also honor FinalizeOn.
+	finalizeCalled := false
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "fail", New: MockRecord{ID: "fail", Name: "always-fails"}},
+		},
+	}
+	_, _ = apply.ExecuteOperations(apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		FinalizeOn:   types.FinalizeOnSuccess,
+		OnAdd:        func(rec types.RecordAddition[MockRecord]) error { return errors.New("synthetic") },
+		OnUpdate:     func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete:     func(types.RecordDeletion[MockRecord]) error { return nil },
+		OnFinalize:   func() error { finalizeCalled = true; return nil },
+	})
+	assert.False(t, finalizeCalled, "FinalizeOnSuccess must gate finalize on the flat path as well")
+}

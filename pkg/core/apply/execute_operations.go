@@ -20,6 +20,7 @@ type ExecuteOperationsParams[T any] struct {
 	OnDelete        func(types.RecordDeletion[T]) error
 	OnFinalize      func() error
 	Parallelization *int
+	FinalizeOn      types.FinalizeOn
 }
 
 func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.ExecutionReport[T], error) {
@@ -235,7 +236,7 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 
 	// Execute finalization with retry and exponential backoff (errors will be reported by caller after execution report)
 	var finalizeErr error
-	if params.OnFinalize != nil {
+	if params.OnFinalize != nil && shouldRunFinalize(params.FinalizeOn, report) {
 		// Retry finalization with the same retry and logging pattern
 		if err := retryWithLogging(params.OnFinalize, "finalize", ""); err != nil {
 			report.FinalizationSuccess = false
@@ -245,6 +246,22 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 	}
 
 	return report, finalizeErr
+}
+
+// shouldRunFinalize returns true when the configured FinalizeOn policy permits
+// invoking OnFinalize given the current execution report.
+func shouldRunFinalize[T any](policy types.FinalizeOn, report *types.ExecutionReport[T]) bool {
+	switch policy {
+	case types.FinalizeOnSuccess:
+		anyFail := !report.Failure.IsEmpty() || !report.Skipped.IsEmpty()
+		return !anyFail
+	case types.FinalizeOnAnySuccess:
+		return !report.Success.IsEmpty()
+	case types.FinalizeAlways:
+		fallthrough
+	default:
+		return true
+	}
 }
 
 // verifyLayersMultiset ensures every op in plan.Additions/Updates/Deletions
