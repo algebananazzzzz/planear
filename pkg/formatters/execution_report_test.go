@@ -2,6 +2,7 @@ package formatters_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/algebananazzzzz/planear/pkg/formatters"
@@ -56,5 +57,55 @@ func TestFormatExecutionReport(t *testing.T) {
 	assert.Contains(t, output, "# 1 entrie(s) were ignored")
 	assert.Contains(t, output, fmt.Sprintf("%s? Already exists:%s ID=5 Name=Eve", ColorPurple, ColorReset))
 
-	assert.Contains(t, output, "Execution result: 3 succeeded, 1 failed, 1 ignored")
+	assert.Contains(t, output, "Execution result: 3 succeeded, 1 failed, 0 skipped, 1 ignored")
+}
+
+func TestFormatExecutionReport_SkippedSection(t *testing.T) {
+	report := types.ExecutionReport[MockRecord]{
+		Success: types.Plan[MockRecord]{
+			Additions: []types.RecordAddition[MockRecord]{
+				{Key: "1", New: MockRecord{ID: "1", Name: "Alice"}},
+			},
+		},
+		Failure: types.Plan[MockRecord]{
+			Additions: []types.RecordAddition[MockRecord]{
+				{Key: "4", New: MockRecord{ID: "4", Name: "David"}},
+			},
+		},
+		Skipped: types.Plan[MockRecord]{
+			Additions: []types.RecordAddition[MockRecord]{
+				{Key: "later", New: MockRecord{ID: "later", Name: "Skippy"}},
+			},
+		},
+		Ignores: []types.RecordIgnored[MockRecord]{
+			{Record: MockRecord{ID: "5", Name: "Eve"}, Reason: "Already exists"},
+		},
+		FinalizationSuccess: true,
+	}
+
+	out := formatters.FormatExecutionReport(report, formatMockRecord, formatMockKey)
+
+	lowered := strings.ToLower(out)
+	assert.Contains(t, lowered, "skipped", "expected a skipped section header")
+	assert.Contains(t, out, "ID=later Name=Skippy", "expected skipped record listed")
+	assert.Contains(t, out, "# 1 operation(s) were skipped")
+	assert.Contains(t, out, "Execution result: 1 succeeded, 1 failed, 1 skipped, 1 ignored")
+
+	failIdx := strings.Index(lowered, "failed")
+	skipIdx := strings.Index(lowered, "skipped")
+	ignoreIdx := strings.Index(lowered, "ignored")
+	assert.True(t, failIdx >= 0, "failed section should exist")
+	assert.True(t, skipIdx > failIdx, "skipped must appear after failed")
+	assert.True(t, ignoreIdx > skipIdx, "ignored must appear after skipped")
+}
+
+func TestFormatExecutionReport_NoSkippedSection_WhenEmpty(t *testing.T) {
+	report := types.ExecutionReport[MockRecord]{
+		Success:             types.Plan[MockRecord]{},
+		FinalizationSuccess: true,
+	}
+
+	out := formatters.FormatExecutionReport(report, formatMockRecord, formatMockKey)
+
+	assert.NotContains(t, out, "operation(s) were skipped", "skipped section should be suppressed when empty")
 }
