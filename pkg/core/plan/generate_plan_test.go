@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/algebananazzzzz/planear/pkg/core/plan"
+	"github.com/algebananazzzzz/planear/pkg/types"
 	"github.com/algebananazzzzz/planear/testutils"
 	"github.com/stretchr/testify/require"
 )
@@ -304,4 +305,102 @@ func TestGeneratePlan_NilFormatKeyFunc(t *testing.T) {
 	_, err := plan.Generate(params)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "FormatKeyFunc is required")
+}
+
+type PositionRec struct {
+	ID     string `csv:"id"`
+	Parent string `csv:"parent"`
+}
+
+func posKey(r PositionRec) string { return r.ID }
+func posDeps(r PositionRec) []string {
+	if r.Parent == "" {
+		return nil
+	}
+	return []string{r.Parent}
+}
+
+func TestGeneratePlan_LayersPopulatedWhenDependsOnSet(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	outputPlanFile := filepath.Join(tmpDir, "plan.json")
+
+	local := []PositionRec{
+		{ID: "Welfare-Member", Parent: "Welfare-Head"},
+		{ID: "President", Parent: ""},
+		{ID: "Welfare-Head", Parent: "President"},
+	}
+	testutils.WriteCSVFile(t, tmpDir, "positions.csv", local)
+
+	params := plan.GenerateParams[PositionRec]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    outputPlanFile,
+		FormatRecordFunc:  func(p PositionRec) string { return p.ID },
+		FormatKeyFunc:     func(k string) string { return k },
+		ExtractKeyFunc:    posKey,
+		LoadRemoteRecords: func() (map[string]PositionRec, error) { return nil, nil },
+		ValidateRecord:    func(PositionRec) error { return nil },
+		DependsOn:         posDeps,
+	}
+
+	result, err := plan.Generate(params)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotNil(t, result.Layers)
+	require.Equal(t, [][]types.LayerOp{
+		{{Kind: types.LayerOpAdd, Key: "President"}},
+		{{Kind: types.LayerOpAdd, Key: "Welfare-Head"}},
+		{{Kind: types.LayerOpAdd, Key: "Welfare-Member"}},
+	}, result.Layers)
+
+	require.True(t, testutils.FileExists(t, outputPlanFile))
+}
+
+func TestGeneratePlan_CycleFailsBeforeFileWrite(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	outputPlanFile := filepath.Join(tmpDir, "plan.json")
+
+	local := []PositionRec{
+		{ID: "A", Parent: "B"},
+		{ID: "B", Parent: "A"},
+	}
+	testutils.WriteCSVFile(t, tmpDir, "positions.csv", local)
+
+	params := plan.GenerateParams[PositionRec]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    outputPlanFile,
+		FormatRecordFunc:  func(p PositionRec) string { return p.ID },
+		FormatKeyFunc:     func(k string) string { return k },
+		ExtractKeyFunc:    posKey,
+		LoadRemoteRecords: func() (map[string]PositionRec, error) { return nil, nil },
+		ValidateRecord:    func(PositionRec) error { return nil },
+		DependsOn:         posDeps,
+	}
+
+	_, err := plan.Generate(params)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cycle detected")
+
+	_, statErr := os.Stat(outputPlanFile)
+	require.True(t, os.IsNotExist(statErr), "plan file must NOT exist after cycle error; got: %v", statErr)
+}
+
+func TestGeneratePlan_NoDependsOn_LayersNil(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	outputPlanFile := filepath.Join(tmpDir, "plan.json")
+	testutils.WriteCSVFile(t, tmpDir, "plan.csv", []Record{{ID: "1", Value: "X"}})
+
+	params := plan.GenerateParams[Record]{
+		CSVPath:           tmpDir,
+		OutputFilePath:    outputPlanFile,
+		FormatRecordFunc:  formatRecord,
+		FormatKeyFunc:     formatKey,
+		ExtractKeyFunc:    extractKey,
+		LoadRemoteRecords: func() (map[string]Record, error) { return nil, nil },
+		ValidateRecord:    noopValidator,
+		// DependsOn intentionally unset
+	}
+
+	result, err := plan.Generate(params)
+	require.NoError(t, err)
+	require.Nil(t, result.Layers)
 }

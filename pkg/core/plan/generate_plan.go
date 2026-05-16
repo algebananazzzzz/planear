@@ -20,6 +20,17 @@ type GenerateParams[T any] struct {
 	ExtractKeyFunc    func(T) string               // Extracts the key from a record
 	LoadRemoteRecords func() (map[string]T, error) // Function to load remote (DB) records
 	ValidateRecord    func(T) error                // Validator for local records
+
+	// DependsOn, when non-nil, makes Generate build a dependency DAG over the
+	// plan and topologically sort it into layers. Returns the keys (as
+	// produced by ExtractKeyFunc) that this record references. Keys not
+	// present in the plan are treated as external. Cycles produce an error
+	// BEFORE the plan file is written.
+	//
+	// For deletions, planear automatically inverts: a row being deleted is
+	// scheduled after every row in the plan that depends on it (by its new
+	// state for adds/updates, or its old state for deletes/updates).
+	DependsOn func(T) []string
 }
 
 func Generate[T any](params GenerateParams[T]) (*types.Plan[T], error) {
@@ -80,6 +91,15 @@ func Generate[T any](params GenerateParams[T]) (*types.Plan[T], error) {
 
 	planDescription := formatters.FormatPlan(plan, params.FormatRecordFunc, params.FormatKeyFunc)
 	fmt.Print(planDescription)
+
+	if params.DependsOn != nil {
+		layers, err := ComputeLayers(plan, params.ExtractKeyFunc, params.DependsOn)
+		if err != nil {
+			fmt.Printf("%sfailed to compute layered plan: %v%s", constants.ColorRed, err, constants.ColorReset)
+			return nil, fmt.Errorf("failed to compute layered plan: %v", err)
+		}
+		plan.Layers = layers
+	}
 
 	if err := utils.WriteJSONFile(params.OutputFilePath, "plan file", plan); err != nil {
 		fmt.Printf("%sfailed to write plan to file: %v%s", constants.ColorRed, err, constants.ColorReset)
