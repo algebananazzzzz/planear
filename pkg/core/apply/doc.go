@@ -145,5 +145,38 @@
 //	    log.Fatalf("execution failed: %v", err)
 //	}
 //
+// # Layered Execution (Plan.Layers)
+//
+// When the loaded plan has a non-nil Layers field (populated by Generate when
+// GenerateParams.DependsOn was set), Run executes the plan layer by layer:
+//
+//   - All ops within a single layer dispatch to the worker pool in parallel
+//     (up to Parallelization workers).
+//   - Layer N+1 starts only after every op in layer N has finished (success
+//     or final failure).
+//   - If any op in a layer fails (after retries), remaining layers are NOT
+//     attempted. Their ops appear in ExecutionReport.Skipped instead of
+//     Failure.
+//
+// Before the first layer dispatches, Run verifies that the multiset of ops in
+// Layers matches the multiset of Additions/Updates/Deletions exactly. A
+// stale or hand-edited plan is rejected with a descriptive error before any
+// DB write.
+//
+// When Plan.Layers is nil, Run takes the existing flat dispatch path.
+//
+// # Finalize Policy (FinalizeOn)
+//
+// RunParams.FinalizeOn controls when OnFinalize is invoked:
+//
+//   - FinalizeAlways (zero value, default): always run OnFinalize, even when
+//     ops failed. Preserves backward-compatible behavior.
+//   - FinalizeOnSuccess: run OnFinalize only when no op failed and no op was
+//     skipped (plan ran to completion).
+//   - FinalizeOnAnySuccess: run OnFinalize when at least one op succeeded;
+//     skip only on zero progress. Recommended for new consumers whose
+//     finalize hooks (matview refresh, cache invalidation) are useful even on
+//     partial success but pointless on zero progress.
+//
 // See package github.com/algebananazzzzz/planear/pkg/core/plan to generate plans.
 package apply
