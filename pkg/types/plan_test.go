@@ -16,7 +16,7 @@ func TestPlan_LayersJSONRoundTrip(t *testing.T) {
 	p := types.Plan[rec]{
 		Additions: []types.RecordAddition[rec]{{Key: "A", New: rec{ID: "A"}}},
 		Layers: [][]types.LayerOp{
-			{{Kind: "add", Key: "A"}},
+			{{Kind: types.LayerOpAdd, Key: "A"}},
 		},
 	}
 
@@ -45,4 +45,10 @@ func TestExecutionReport_SkippedField(t *testing.T) {
 	raw, err := json.Marshal(report)
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"skipped"`)
+}
+
+func TestLayerOpConstants(t *testing.T) {
+	require.Equal(t, "add", types.LayerOpAdd)
+	require.Equal(t, "update", types.LayerOpUpdate)
+	require.Equal(t, "delete", types.LayerOpDelete)
 }
