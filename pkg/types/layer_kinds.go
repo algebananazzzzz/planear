@@ -1,8 +1,12 @@
 package types
 
-// LayerOp.Kind values for the three operation classes a plan can contain.
+// LayerOpKind identifies which class of operation a LayerOp represents.
+// The underlying string type is preserved so JSON encoding remains
+// "add"/"update"/"delete", matching pre-typed-enum plan files on disk.
+type LayerOpKind string
+
 const (
-	LayerOpAdd    = "add"
-	LayerOpUpdate = "update"
-	LayerOpDelete = "delete"
+	LayerOpAdd    LayerOpKind = "add"
+	LayerOpUpdate LayerOpKind = "update"
+	LayerOpDelete LayerOpKind = "delete"
 )

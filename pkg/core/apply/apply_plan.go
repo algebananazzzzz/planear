@@ -75,11 +75,12 @@ func Run[T any](params RunParams[T]) error {
 		// Finalization failed
 		finalErr = err
 	} else if result != nil {
-		// Check if any operations failed
 		failureCount := len(result.Failure.Additions) + len(result.Failure.Updates) + len(result.Failure.Deletions)
-		if failureCount > 0 {
-			finalErr = fmt.Errorf("some operations failed: %d added, %d updated, %d deleted",
-				len(result.Failure.Additions), len(result.Failure.Updates), len(result.Failure.Deletions))
+		skippedCount := len(result.Skipped.Additions) + len(result.Skipped.Updates) + len(result.Skipped.Deletions)
+		if failureCount > 0 || skippedCount > 0 {
+			finalErr = fmt.Errorf("plan execution incomplete: %d failed (%d added, %d updated, %d deleted), %d skipped (%d added, %d updated, %d deleted)",
+				failureCount, len(result.Failure.Additions), len(result.Failure.Updates), len(result.Failure.Deletions),
+				skippedCount, len(result.Skipped.Additions), len(result.Skipped.Updates), len(result.Skipped.Deletions))
 		}
 	}
 

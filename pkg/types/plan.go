@@ -18,8 +18,8 @@ type Plan[T any] struct {
 // the operation's Key field within the corresponding Additions / Updates /
 // Deletions slice.
 type LayerOp struct {
-	Kind string `json:"kind"`
-	Key  string `json:"key"`
+	Kind LayerOpKind `json:"kind"`
+	Key  string      `json:"key"`
 }
 
 type ExecutionReport[T any] struct {

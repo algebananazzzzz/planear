@@ -48,7 +48,7 @@ func TestExecutionReport_SkippedField(t *testing.T) {
 }
 
 func TestLayerOpConstants(t *testing.T) {
-	require.Equal(t, "add", types.LayerOpAdd)
-	require.Equal(t, "update", types.LayerOpUpdate)
-	require.Equal(t, "delete", types.LayerOpDelete)
+	require.Equal(t, types.LayerOpKind("add"), types.LayerOpAdd)
+	require.Equal(t, types.LayerOpKind("update"), types.LayerOpUpdate)
+	require.Equal(t, types.LayerOpKind("delete"), types.LayerOpDelete)
 }

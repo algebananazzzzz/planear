@@ -19,7 +19,10 @@ import (
 // whose effective state references the deleted key. For Additions, the NEW
 // state is checked. For Updates, BOTH the NEW state AND the OLD state are
 // checked (the old reference must be cleared by the update before the
-// deletion can drop the referenced row).
+// deletion can drop the referenced row). For Deletions, the OLD state of
+// the other deletion is checked — when deleting both a parent and a child
+// that references it, the child must be deleted first so the parent-delete
+// doesn't hit an FK violation.
 //
 // Returns an error of the form "cycle detected: ..." if the dependency graph
 // contains a cycle.
@@ -27,7 +30,6 @@ func ComputeLayers[T any](
 	p types.Plan[T],
 	dependsOn func(T) []string,
 ) ([][]types.LayerOp, error) {
-	// Build the op list with kind/key plus the resolved dependency sets.
 	type opNode struct {
 		layerOp types.LayerOp
 		nodeID  string
@@ -36,7 +38,7 @@ func ComputeLayers[T any](
 		oldDeps []string
 	}
 
-	idOf := func(kind, key string) string { return kind + ":" + key }
+	idOf := func(kind types.LayerOpKind, key string) string { return string(kind) + ":" + key }
 
 	ops := make([]opNode, 0, len(p.Additions)+len(p.Updates)+len(p.Deletions))
 	for _, a := range p.Additions {
@@ -65,7 +67,6 @@ func ComputeLayers[T any](
 		})
 	}
 
-	// Index ops by their key for fast lookup during edge construction.
 	// A given key may have at most one add or one update (not both — Plan
 	// invariant). A deletion uses the same key namespace.
 	addOrUpdateByKey := make(map[string]*opNode, len(ops))
@@ -76,7 +77,6 @@ func ComputeLayers[T any](
 		}
 	}
 
-	// Assemble node list and edge map for BuildLayers.
 	nodes := make([]string, 0, len(ops))
 	nodeToOp := make(map[string]types.LayerOp, len(ops))
 	for _, o := range ops {
@@ -89,7 +89,6 @@ func ComputeLayers[T any](
 		o := &ops[i]
 		switch o.layerOp.Kind {
 		case types.LayerOpAdd, types.LayerOpUpdate:
-			// O depends on the add/update op of every key it references.
 			for _, depKey := range o.newDeps {
 				if dep, ok := addOrUpdateByKey[depKey]; ok {
 					edges[o.nodeID] = append(edges[o.nodeID], dep.nodeID)
@@ -98,7 +97,6 @@ func ComputeLayers[T any](
 		}
 	}
 
-	// Deletion inversion.
 	for i := range ops {
 		o := &ops[i]
 		if o.layerOp.Kind != types.LayerOpDelete {
@@ -116,6 +114,8 @@ func ComputeLayers[T any](
 				refs = slices.Contains(other.newDeps, delKey)
 			case types.LayerOpUpdate:
 				refs = slices.Contains(other.newDeps, delKey) || slices.Contains(other.oldDeps, delKey)
+			case types.LayerOpDelete:
+				refs = slices.Contains(other.oldDeps, delKey)
 			}
 			if refs {
 				edges[o.nodeID] = append(edges[o.nodeID], other.nodeID)

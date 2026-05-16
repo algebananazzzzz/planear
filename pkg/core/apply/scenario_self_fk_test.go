@@ -145,6 +145,81 @@ func TestScenario_CCAPositions_DeletionInverts(t *testing.T) {
 	require.Equal(t, "", db.rows["child"].ReportingTo)
 }
 
+func TestScenario_CCAPositions_CascadingDeleteSucceedsWithLayering(t *testing.T) {
+	// Real-DB analogue: parent and child both deleted in one plan, where
+	// child.Old references parent. Layering must order child-delete before
+	// parent-delete to satisfy the FK-enforcing fakeDB; without layering the
+	// two deletions race.
+	db := newFakeDB()
+	require.NoError(t, db.add(Position{Key: "parent", Name: "P"}))
+	require.NoError(t, db.add(Position{Key: "child", Name: "C", ReportingTo: "parent"}))
+
+	p := types.Plan[Position]{
+		Deletions: []types.RecordDeletion[Position]{
+			{Key: "parent", Old: Position{Key: "parent", Name: "P"}},
+			{Key: "child", Old: Position{Key: "child", Name: "C", ReportingTo: "parent"}},
+		},
+	}
+	layers, err := plan.ComputeLayers(p, posDeps)
+	require.NoError(t, err)
+	require.Equal(t, [][]types.LayerOp{
+		{{Kind: types.LayerOpDelete, Key: "child"}},
+		{{Kind: types.LayerOpDelete, Key: "parent"}},
+	}, layers)
+	p.Layers = layers
+
+	parallelism := 4
+	report, err := apply.ExecuteOperations(apply.ExecuteOperationsParams[Position]{
+		Plan:            p,
+		FormatRecord:    func(pos Position) string { return pos.Key },
+		FormatKey:       func(k string) string { return k },
+		Parallelization: &parallelism,
+		OnAdd:           func(r types.RecordAddition[Position]) error { return db.add(r.New) },
+		OnUpdate:        func(types.RecordUpdate[Position]) error { return nil },
+		OnDelete:        func(r types.RecordDeletion[Position]) error { return db.delete(r.Old.Key) },
+	})
+	require.NoError(t, err)
+	require.Len(t, report.Success.Deletions, 2)
+	require.Empty(t, report.Failure.Deletions)
+	require.NotContains(t, db.rows, "parent")
+	require.NotContains(t, db.rows, "child")
+}
+
+func TestScenario_CCAPositions_CascadingDeleteFlatPathCanRace(t *testing.T) {
+	// Companion to the layered cascading-delete test: with Layers == nil, the
+	// flat path dispatches both deletes concurrently. Whether the race
+	// manifests depends on goroutine scheduling, so this test is informational
+	// — it just asserts the failure mode the layered version eliminates is
+	// real enough to be worth fixing.
+	saw := 0
+	for i := 0; i < 20; i++ {
+		db := newFakeDB()
+		require.NoError(t, db.add(Position{Key: "parent", Name: "P"}))
+		require.NoError(t, db.add(Position{Key: "child", Name: "C", ReportingTo: "parent"}))
+
+		p := types.Plan[Position]{
+			Deletions: []types.RecordDeletion[Position]{
+				{Key: "parent", Old: Position{Key: "parent", Name: "P"}},
+				{Key: "child", Old: Position{Key: "child", Name: "C", ReportingTo: "parent"}},
+			},
+		}
+		parallelism := 4
+		report, _ := apply.ExecuteOperations(apply.ExecuteOperationsParams[Position]{
+			Plan:            p,
+			FormatRecord:    func(pos Position) string { return pos.Key },
+			FormatKey:       func(k string) string { return k },
+			Parallelization: &parallelism,
+			OnAdd:           func(r types.RecordAddition[Position]) error { return db.add(r.New) },
+			OnUpdate:        func(types.RecordUpdate[Position]) error { return nil },
+			OnDelete:        func(r types.RecordDeletion[Position]) error { return db.delete(r.Old.Key) },
+		})
+		if len(report.Failure.Deletions) > 0 {
+			saw++
+		}
+	}
+	t.Logf("flat-path cascading-delete failure observed in %d/20 iterations (documentation only)", saw)
+}
+
 func TestScenario_CCAPositions_FlatPathCanRace(t *testing.T) {
 	// Without Layers, the flat path may attempt to add the child before the parent.
 	// The test isn't required to fail deterministically — it's a documentation test

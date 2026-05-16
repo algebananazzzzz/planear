@@ -59,6 +59,25 @@ func TestComputeLayers_DeletionInverts(t *testing.T) {
 	}, layers)
 }
 
+func TestComputeLayers_DeletionAfterDeletionThatReferencesIt(t *testing.T) {
+	// Both parent and child are being deleted; child.Old references parent.
+	// The parent-delete must run AFTER the child-delete, otherwise a real
+	// FK-enforcing DB would reject the parent-delete because the child row
+	// still references it.
+	p := types.Plan[depRec]{
+		Deletions: []types.RecordDeletion[depRec]{
+			{Key: "parent", Old: depRec{Key: "parent"}},
+			{Key: "child", Old: depRec{Key: "child", Parent: "parent"}},
+		},
+	}
+	layers, err := plan.ComputeLayers(p, parentOf)
+	require.NoError(t, err)
+	require.Equal(t, [][]types.LayerOp{
+		{{Kind: types.LayerOpDelete, Key: "child"}},
+		{{Kind: types.LayerOpDelete, Key: "parent"}},
+	}, layers)
+}
+
 func TestComputeLayers_DeletionAfterAdditionThatReferencesIt(t *testing.T) {
 	// Edge case: an Addition's NEW state references something being deleted.
 	// (Unusual but possible: adding a row that points to a soon-to-be-deleted row.)

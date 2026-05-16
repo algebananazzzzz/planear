@@ -162,7 +162,6 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 	var skipped types.Plan[T]
 
 	if params.Plan.Layers != nil {
-		// --- Layered path ---
 		if err := verifyLayersMultiset(params.Plan); err != nil {
 			return nil, err
 		}
@@ -226,7 +225,6 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 			}
 		}
 	} else {
-		// --- Flat path (existing behavior) ---
 		// Execute deletions first to free up resources/identifiers before additions/updates
 		for _, del := range params.Plan.Deletions {
 			tasks = append(tasks, deleteTask(del))
