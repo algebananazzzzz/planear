@@ -685,3 +685,62 @@ func TestExecuteOperations_LayeredPath_FailureCascadesToSkipped(t *testing.T) {
 	assert.Len(t, report.Skipped.Deletions, 1)
 	assert.Equal(t, "skipDel", report.Skipped.Deletions[0].Key)
 }
+
+func TestExecuteOperations_LayeredPath_SiblingsInFailingLayerStillRun(t *testing.T) {
+	// One failing op alongside two successful siblings in the same layer.
+	// All three must be ATTEMPTED (and the two successes recorded) before
+	// the layer's failure is detected and downstream layers are skipped.
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "L0a", New: MockRecord{ID: "L0a"}},
+			{Key: "L0fail", New: MockRecord{ID: "L0fail", Name: "always-fails"}},
+			{Key: "L0b", New: MockRecord{ID: "L0b"}},
+			{Key: "L1", New: MockRecord{ID: "L1"}},
+		},
+		Layers: [][]types.LayerOp{
+			{
+				{Kind: types.LayerOpAdd, Key: "L0a"},
+				{Kind: types.LayerOpAdd, Key: "L0fail"},
+				{Kind: types.LayerOpAdd, Key: "L0b"},
+			},
+			{{Kind: types.LayerOpAdd, Key: "L1"}},
+		},
+	}
+
+	var mu sync.Mutex
+	attempted := map[string]bool{}
+	parallelism := 4
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:            plan,
+		FormatRecord:    func(r MockRecord) string { return r.ID },
+		FormatKey:       func(k string) string { return k },
+		Parallelization: &parallelism,
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			mu.Lock()
+			attempted[rec.New.ID] = true
+			mu.Unlock()
+			if rec.New.Name == "always-fails" {
+				return errors.New("synthetic")
+			}
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	report, err := apply.ExecuteOperations(params)
+	assert.NoError(t, err)
+
+	// All three L0 ops attempted (siblings of the failure still ran).
+	assert.True(t, attempted["L0a"], "L0a must be attempted")
+	assert.True(t, attempted["L0fail"], "L0fail must be attempted")
+	assert.True(t, attempted["L0b"], "L0b must be attempted")
+	// L1 NOT attempted because L0 had a failure.
+	assert.False(t, attempted["L1"], "L1 must NOT be attempted after L0 failed")
+
+	// Two L0 successes recorded; one L0 failure; L1 in skipped.
+	assert.Len(t, report.Success.Additions, 2)
+	assert.Len(t, report.Failure.Additions, 1)
+	assert.Len(t, report.Skipped.Additions, 1)
+	assert.Equal(t, "L1", report.Skipped.Additions[0].Key)
+}

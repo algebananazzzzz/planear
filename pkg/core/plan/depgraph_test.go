@@ -14,7 +14,6 @@ type depRec struct {
 	Parent string
 }
 
-func keyOf(r depRec) string { return r.Key }
 func parentOf(r depRec) []string {
 	if r.Parent == "" {
 		return nil
@@ -29,7 +28,7 @@ func TestComputeLayers_AdditionDependsOnAddition(t *testing.T) {
 			{Key: "parent", New: depRec{Key: "parent"}},
 		},
 	}
-	layers, err := plan.ComputeLayers(p, keyOf, parentOf)
+	layers, err := plan.ComputeLayers(p, parentOf)
 	require.NoError(t, err)
 	require.Equal(t, [][]types.LayerOp{
 		{{Kind: types.LayerOpAdd, Key: "parent"}},
@@ -52,7 +51,7 @@ func TestComputeLayers_DeletionInverts(t *testing.T) {
 			{Key: "parent", Old: depRec{Key: "parent"}},
 		},
 	}
-	layers, err := plan.ComputeLayers(p, keyOf, parentOf)
+	layers, err := plan.ComputeLayers(p, parentOf)
 	require.NoError(t, err)
 	require.Equal(t, [][]types.LayerOp{
 		{{Kind: types.LayerOpUpdate, Key: "child"}},
@@ -72,7 +71,7 @@ func TestComputeLayers_DeletionAfterAdditionThatReferencesIt(t *testing.T) {
 			{Key: "doomed", Old: depRec{Key: "doomed"}},
 		},
 	}
-	layers, err := plan.ComputeLayers(p, keyOf, parentOf)
+	layers, err := plan.ComputeLayers(p, parentOf)
 	require.NoError(t, err)
 	require.Equal(t, [][]types.LayerOp{
 		{{Kind: types.LayerOpAdd, Key: "newchild"}},
@@ -87,7 +86,7 @@ func TestComputeLayers_CycleReturnsError(t *testing.T) {
 			{Key: "B", New: depRec{Key: "B", Parent: "A"}},
 		},
 	}
-	_, err := plan.ComputeLayers(p, keyOf, parentOf)
+	_, err := plan.ComputeLayers(p, parentOf)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "cycle detected")
 }
@@ -98,7 +97,7 @@ func TestComputeLayers_DependencyOutsidePlanIsExternal(t *testing.T) {
 			{Key: "child", New: depRec{Key: "child", Parent: "ghost"}},
 		},
 	}
-	layers, err := plan.ComputeLayers(p, keyOf, parentOf)
+	layers, err := plan.ComputeLayers(p, parentOf)
 	require.NoError(t, err)
 	require.Equal(t, [][]types.LayerOp{
 		{{Kind: types.LayerOpAdd, Key: "child"}},
@@ -106,7 +105,7 @@ func TestComputeLayers_DependencyOutsidePlanIsExternal(t *testing.T) {
 }
 
 func TestComputeLayers_EmptyPlanReturnsNoLayers(t *testing.T) {
-	layers, err := plan.ComputeLayers(types.Plan[depRec]{}, keyOf, parentOf)
+	layers, err := plan.ComputeLayers(types.Plan[depRec]{}, parentOf)
 	require.NoError(t, err)
 	require.Empty(t, layers)
 }
@@ -118,7 +117,6 @@ func TestComputeLayers_DiamondDependencies(t *testing.T) {
 		Key     string
 		Parents []string
 	}
-	mKey := func(r multiRec) string { return r.Key }
 	mDeps := func(r multiRec) []string { return r.Parents }
 
 	p := types.Plan[multiRec]{
@@ -129,7 +127,7 @@ func TestComputeLayers_DiamondDependencies(t *testing.T) {
 			{Key: "D", New: multiRec{Key: "D", Parents: []string{"B", "C"}}},
 		},
 	}
-	layers, err := plan.ComputeLayers(p, mKey, mDeps)
+	layers, err := plan.ComputeLayers(p, mDeps)
 	require.NoError(t, err)
 	require.Len(t, layers, 3)
 	assert.Equal(t, []types.LayerOp{{Kind: types.LayerOpAdd, Key: "A"}}, layers[0])

@@ -197,6 +197,9 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 				}
 			}
 
+			// concurrency.ExecuteTasks waits on all workers via wg.Wait before
+			// returning, so the failure counters can be read safely here without
+			// additional synchronization.
 			failBefore := len(failure.Additions) + len(failure.Updates) + len(failure.Deletions)
 			if err := concurrency.ExecuteTasks(layerTasks, *params.Parallelization); err != nil {
 				return nil, fmt.Errorf("failed to execute layer %d: %w", layerIdx, err)

@@ -51,7 +51,6 @@ func (d *fakeDB) delete(key string) error {
 	return nil
 }
 
-func posKey(p Position) string { return p.Key }
 func posDeps(p Position) []string {
 	if p.ReportingTo == "" {
 		return nil
@@ -69,7 +68,7 @@ func TestScenario_CCAPositions_LayeredSucceeds(t *testing.T) {
 	}
 	p := types.Plan[Position]{Additions: additions}
 
-	layers, err := plan.ComputeLayers(p, posKey, posDeps)
+	layers, err := plan.ComputeLayers(p, posDeps)
 	require.NoError(t, err)
 	p.Layers = layers
 
@@ -115,7 +114,7 @@ func TestScenario_CCAPositions_DeletionInverts(t *testing.T) {
 		},
 	}
 
-	layers, err := plan.ComputeLayers(p, posKey, posDeps)
+	layers, err := plan.ComputeLayers(p, posDeps)
 	require.NoError(t, err)
 	require.Equal(t, [][]types.LayerOp{
 		{{Kind: types.LayerOpUpdate, Key: "child"}},

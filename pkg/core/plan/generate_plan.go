@@ -93,7 +93,7 @@ func Generate[T any](params GenerateParams[T]) (*types.Plan[T], error) {
 	fmt.Print(planDescription)
 
 	if params.DependsOn != nil {
-		layers, err := ComputeLayers(plan, params.ExtractKeyFunc, params.DependsOn)
+		layers, err := ComputeLayers(plan, params.DependsOn)
 		if err != nil {
 			fmt.Printf("%sfailed to compute layered plan: %v%s", constants.ColorRed, err, constants.ColorReset)
 			return nil, fmt.Errorf("failed to compute layered plan: %v", err)

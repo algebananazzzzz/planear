@@ -23,8 +23,12 @@ type LayerOp struct {
 }
 
 type ExecutionReport[T any] struct {
-	Success              Plan[T]            `json:"success"`
-	Failure              Plan[T]            `json:"failure"`
+	Success Plan[T] `json:"success"`
+	Failure Plan[T] `json:"failure"`
+	// Skipped lists ops that were not attempted because an earlier layer
+	// failed (layered apply only). Tag intentionally lacks omitempty: callers
+	// parsing the report JSON can rely on the field always being present,
+	// matching the symmetric treatment of Success and Failure.
 	Skipped              Plan[T]            `json:"skipped"`
 	Ignores              []RecordIgnored[T] `json:"ignores"`
 	FinalizationSuccess  bool               `json:"finalization_success"`

@@ -1,6 +1,8 @@
 package plan
 
 import (
+	"slices"
+
 	"github.com/algebananazzzzz/planear/pkg/internal/dag"
 	"github.com/algebananazzzzz/planear/pkg/types"
 )
@@ -8,10 +10,10 @@ import (
 // ComputeLayers builds the dependency DAG for a Plan and returns its
 // topological layering.
 //
-// extractKey(record) returns the record's identity (must match the Key field
-// of the corresponding RecordAddition / RecordUpdate / RecordDeletion).
 // dependsOn(record) returns the keys the record references. Keys not present
-// in the plan are treated as external (impose no in-plan ordering).
+// in the plan are treated as external (impose no in-plan ordering). Record
+// identity is taken from the Key field already populated on each
+// RecordAddition / RecordUpdate / RecordDeletion.
 //
 // Deletion inversion: a deletion node is scheduled AFTER every other op
 // whose effective state references the deleted key. For Additions, the NEW
@@ -23,12 +25,8 @@ import (
 // contains a cycle.
 func ComputeLayers[T any](
 	p types.Plan[T],
-	extractKey func(T) string,
 	dependsOn func(T) []string,
 ) ([][]types.LayerOp, error) {
-	_ = extractKey // kept in signature to document the contract; Key fields on
-	// RecordAddition / RecordUpdate / RecordDeletion are already populated.
-
 	// Build the op list with kind/key plus the resolved dependency sets.
 	type opNode struct {
 		layerOp types.LayerOp
@@ -115,9 +113,9 @@ func ComputeLayers[T any](
 			refs := false
 			switch other.layerOp.Kind {
 			case types.LayerOpAdd:
-				refs = containsString(other.newDeps, delKey)
+				refs = slices.Contains(other.newDeps, delKey)
 			case types.LayerOpUpdate:
-				refs = containsString(other.newDeps, delKey) || containsString(other.oldDeps, delKey)
+				refs = slices.Contains(other.newDeps, delKey) || slices.Contains(other.oldDeps, delKey)
 			}
 			if refs {
 				edges[o.nodeID] = append(edges[o.nodeID], other.nodeID)
@@ -141,13 +139,4 @@ func ComputeLayers[T any](
 		}
 	}
 	return result, nil
-}
-
-func containsString(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
 }
