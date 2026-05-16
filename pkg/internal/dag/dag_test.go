@@ -66,6 +66,19 @@ func TestBuildLayers_SelfLoopReportsCycle(t *testing.T) {
 	assert.Contains(t, err.Error(), "cycle detected")
 }
 
+// TestBuildLayers_CycleWithExternalDeps ensures formatCycleError correctly
+// skips dependencies that are outside the node set when walking the cycle.
+func TestBuildLayers_CycleWithExternalDeps(t *testing.T) {
+	edges := map[string][]string{
+		"A": {"EXTERNAL_1", "B"},
+		"B": {"EXTERNAL_2", "A"},
+	}
+	_, err := dag.BuildLayers([]string{"A", "B"}, edges)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cycle detected")
+	assert.NotContains(t, err.Error(), "EXTERNAL")
+}
+
 func TestBuildLayers_EmptyInput(t *testing.T) {
 	layers, err := dag.BuildLayers(nil, nil)
 	require.NoError(t, err)

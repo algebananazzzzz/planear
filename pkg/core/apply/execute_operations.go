@@ -184,6 +184,9 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 		for layerIdx, layer := range params.Plan.Layers {
 			layerTasks := make([]concurrency.Task, 0, len(layer))
 			for _, op := range layer {
+				// verifyLayersMultiset above guarantees every op.Kind is one
+				// of LayerOpAdd/Update/Delete because each came from
+				// plan.Additions/Updates/Deletions; no default branch needed.
 				switch op.Kind {
 				case types.LayerOpAdd:
 					layerTasks = append(layerTasks, addTask(addByKey[op.Key]))
@@ -191,8 +194,6 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 					layerTasks = append(layerTasks, updateTask(updByKey[op.Key]))
 				case types.LayerOpDelete:
 					layerTasks = append(layerTasks, deleteTask(delByKey[op.Key]))
-				default:
-					return nil, fmt.Errorf("plan.Layers unknown op kind %q at layer %d", op.Kind, layerIdx)
 				}
 			}
 

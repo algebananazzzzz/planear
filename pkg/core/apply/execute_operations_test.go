@@ -632,12 +632,16 @@ func TestExecuteOperations_LayeredPath_FailureCascadesToSkipped(t *testing.T) {
 			{Key: "skip1", New: MockRecord{ID: "skip1"}},
 			{Key: "skip2", New: MockRecord{ID: "skip2"}},
 		},
+		Updates: []types.RecordUpdate[MockRecord]{
+			{Key: "skipUpd", Old: MockRecord{ID: "skipUpd"}, New: MockRecord{ID: "skipUpd", Name: "new"}},
+		},
 		Deletions: []types.RecordDeletion[MockRecord]{
 			{Key: "skipDel", Old: MockRecord{ID: "skipDel"}},
 		},
 		Layers: [][]types.LayerOp{
 			{{Kind: types.LayerOpAdd, Key: "fails"}},
 			{{Kind: types.LayerOpAdd, Key: "skip1"}, {Kind: types.LayerOpAdd, Key: "skip2"}},
+			{{Kind: types.LayerOpUpdate, Key: "skipUpd"}},
 			{{Kind: types.LayerOpDelete, Key: "skipDel"}},
 		},
 	}
@@ -657,7 +661,10 @@ func TestExecuteOperations_LayeredPath_FailureCascadesToSkipped(t *testing.T) {
 			}
 			return nil
 		},
-		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnUpdate: func(rec types.RecordUpdate[MockRecord]) error {
+			record("upd:" + rec.New.ID)
+			return nil
+		},
 		OnDelete: func(rec types.RecordDeletion[MockRecord]) error {
 			record("del:" + rec.Old.ID)
 			return nil
@@ -668,10 +675,13 @@ func TestExecuteOperations_LayeredPath_FailureCascadesToSkipped(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotContains(t, attempted, "add:skip1")
 	assert.NotContains(t, attempted, "add:skip2")
+	assert.NotContains(t, attempted, "upd:skipUpd")
 	assert.NotContains(t, attempted, "del:skipDel")
 	assert.Len(t, report.Failure.Additions, 1)
 	assert.Equal(t, "fails", report.Failure.Additions[0].Key)
 	assert.Len(t, report.Skipped.Additions, 2)
+	assert.Len(t, report.Skipped.Updates, 1)
+	assert.Equal(t, "skipUpd", report.Skipped.Updates[0].Key)
 	assert.Len(t, report.Skipped.Deletions, 1)
 	assert.Equal(t, "skipDel", report.Skipped.Deletions[0].Key)
 }

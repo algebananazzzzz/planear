@@ -94,6 +94,11 @@ func formatCycleError(nodes []string, indegree map[string]int, edges map[string]
 		visited[current] = len(path)
 		path = append(path, current)
 
+		// Every node we reach here has indegree > 0, so it must have at least
+		// one in-plan dependency that also has indegree > 0 (otherwise its
+		// own indegree would already have been decremented to 0 in BuildLayers
+		// and we'd never have entered formatCycleError). Therefore the loop
+		// below is guaranteed to find a next node.
 		var next string
 		for _, dep := range edges[current] {
 			if _, in := nodeSet[dep]; !in {
@@ -103,9 +108,6 @@ func formatCycleError(nodes []string, indegree map[string]int, edges map[string]
 				next = dep
 				break
 			}
-		}
-		if next == "" {
-			return fmt.Errorf("cycle detected (path truncated): %s", strings.Join(path, " -> "))
 		}
 		current = next
 	}
