@@ -2,12 +2,14 @@ package apply_test
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 	"testing"
 
 	"github.com/algebananazzzzz/planear/pkg/core/apply"
 	"github.com/algebananazzzzz/planear/pkg/core/plan"
 	"github.com/algebananazzzzz/planear/pkg/types"
+	"github.com/algebananazzzzz/planear/testutils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -176,4 +178,72 @@ func TestScenario_CCAPositions_FlatPathCanRace(t *testing.T) {
 		}
 	}
 	t.Logf("flat-path failure observed in %d/20 iterations (documentation only)", saw)
+}
+
+func TestRun_LayeredPlan_RoundTripsThroughFile(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	planPath := filepath.Join(tmpDir, "plan.json")
+
+	p := types.Plan[Position]{
+		Additions: []types.RecordAddition[Position]{
+			{Key: "parent", New: Position{Key: "parent"}},
+			{Key: "child", New: Position{Key: "child", ReportingTo: "parent"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "parent"}},
+			{{Kind: types.LayerOpAdd, Key: "child"}},
+		},
+	}
+	testutils.WriteJSONFile(t, tmpDir, "plan.json", p)
+
+	db := newFakeDB()
+	err := apply.Run(apply.RunParams[Position]{
+		PlanFilePath: planPath,
+		FormatRecord: func(p Position) string { return p.Key },
+		FormatKey:    func(k string) string { return k },
+		OnAdd:        func(r types.RecordAddition[Position]) error { return db.add(r.New) },
+		OnUpdate:     func(types.RecordUpdate[Position]) error { return nil },
+		OnDelete:     func(r types.RecordDeletion[Position]) error { return db.delete(r.Old.Key) },
+	})
+	require.NoError(t, err)
+	require.Contains(t, db.rows, "parent")
+	require.Contains(t, db.rows, "child")
+}
+
+func TestRun_HandEditedPlan_RejectedByMultisetCheck(t *testing.T) {
+	tmpDir := testutils.NewTestDir(t)
+	planPath := filepath.Join(tmpDir, "plan.json")
+
+	// Plan has TWO additions but Layers references only ONE — multiset mismatch.
+	p := types.Plan[Position]{
+		Additions: []types.RecordAddition[Position]{
+			{Key: "A", New: Position{Key: "A"}},
+			{Key: "B", New: Position{Key: "B"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "A"}},
+			// "B" intentionally missing
+		},
+	}
+	testutils.WriteJSONFile(t, tmpDir, "plan.json", p)
+
+	db := newFakeDB()
+	added := 0
+	var addedMu sync.Mutex
+	err := apply.Run(apply.RunParams[Position]{
+		PlanFilePath: planPath,
+		FormatRecord: func(p Position) string { return p.Key },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(r types.RecordAddition[Position]) error {
+			addedMu.Lock()
+			added++
+			addedMu.Unlock()
+			return db.add(r.New)
+		},
+		OnUpdate: func(types.RecordUpdate[Position]) error { return nil },
+		OnDelete: func(r types.RecordDeletion[Position]) error { return db.delete(r.Old.Key) },
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "multiset")
+	require.Equal(t, 0, added, "no DB writes must occur on multiset mismatch")
 }
