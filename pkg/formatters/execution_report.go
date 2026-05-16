@@ -46,6 +46,7 @@ func FormatExecutionReport[T any](
 
 	successReport, successCount := formatPlanDetails(success, formatRecord, formatKey)
 	failureReport, failureCount := formatPlanDetails(failure, formatRecord, formatKey)
+	skippedReport, skippedCount := formatPlanDetails(result.Skipped, formatRecord, formatKey)
 
 	fmt.Fprintf(&b, "\n# %d operation(s) succeeded\n", successCount.Total)
 	fmt.Fprint(&b, successReport)
@@ -54,6 +55,12 @@ func FormatExecutionReport[T any](
 	fmt.Fprintf(&b, "\n# %d operation(s) failed\n", failureCount.Total)
 	fmt.Fprint(&b, failureReport)
 	fmt.Fprintf(&b, "Summary: %d added, %d updated, %d deleted\n", failureCount.Addition, failureCount.Update, failureCount.Deletion)
+
+	if skippedCount.Total > 0 {
+		fmt.Fprintf(&b, "\n# %d operation(s) were skipped\n", skippedCount.Total)
+		fmt.Fprint(&b, skippedReport)
+		fmt.Fprintf(&b, "Summary: %d added, %d updated, %d deleted\n", skippedCount.Addition, skippedCount.Update, skippedCount.Deletion)
+	}
 
 	if len(ignores) > 0 {
 		fmt.Fprintf(&b, "\n# %d entrie(s) were ignored\n", len(ignores))
@@ -70,6 +77,7 @@ func FormatExecutionReport[T any](
 		fmt.Fprintf(&b, "  %s✗ Finalization failed: %s%s\n", constants.ColorRed, result.FinalizationErrorMsg, constants.ColorReset)
 	}
 
-	fmt.Fprintf(&b, "\nExecution result: %d succeeded, %d failed, %d ignored\n", successCount.Total, failureCount.Total, len(ignores))
+	fmt.Fprintf(&b, "\nExecution result: %d succeeded, %d failed, %d skipped, %d ignored\n",
+		successCount.Total, failureCount.Total, skippedCount.Total, len(ignores))
 	return b.String()
 }

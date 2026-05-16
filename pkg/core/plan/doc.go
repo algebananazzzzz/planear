@@ -90,5 +90,32 @@
 // Records that fail validation are not considered errors—they're added to the
 // Ignores list in the plan with the validation error as reason.
 //
+// # Dependency-Aware Layering (DependsOn)
+//
+// When GenerateParams.DependsOn is set, Generate builds a dependency DAG over
+// the plan and topologically sorts it into layers. The sorted layers are
+// serialized into Plan.Layers and consumed at apply time to enforce safe
+// execution order.
+//
+//   - DependsOn returns the keys (as produced by ExtractKeyFunc) that a
+//     record references. Keys not present in the plan are treated as external
+//     (impose no in-plan ordering).
+//   - Cycles surface as errors before the plan file is written; the consumer
+//     sees "cycle detected: A -> B -> C -> A" with no side effect.
+//   - Deletions automatically invert: a deletion node is placed AFTER every
+//     node whose new (or old, for updates) state references the deleted key.
+//
+// Example for self-referencing FK on a positions table:
+//
+//	params.DependsOn = func(p Position) []string {
+//	    if p.ReportingTo == "" {
+//	        return nil
+//	    }
+//	    return []string{p.ReportingTo}
+//	}
+//
+// When DependsOn is nil, Plan.Layers is left nil and apply takes its existing
+// flat dispatch path.
+//
 // See package github.com/algebananazzzzz/planear/pkg/core/apply to execute plans.
 package plan

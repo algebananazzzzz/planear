@@ -31,3 +31,7 @@ generated/
 # Plan/apply output
 examples/data/generated/
 examples/data/plan.json
+
+# Local planning / scratch
+docs/superpowers/
+ORDERING_HOOK_PROMPT.md
