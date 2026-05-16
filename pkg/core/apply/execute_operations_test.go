@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/algebananazzzzz/planear/pkg/core/apply"
@@ -321,4 +322,121 @@ func TestExecuteOperations_NilOnDelete(t *testing.T) {
 	_, err := apply.ExecuteOperations(params)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "OnDelete is required")
+}
+
+func TestExecuteOperations_LayeredPath_RespectsOrder(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "parent", New: MockRecord{ID: "parent"}},
+			{Key: "child", New: MockRecord{ID: "child"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "parent"}},
+			{{Kind: types.LayerOpAdd, Key: "child"}},
+		},
+	}
+
+	var mu sync.Mutex
+	var order []string
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(rec types.RecordAddition[MockRecord]) error {
+			mu.Lock()
+			order = append(order, rec.New.ID)
+			mu.Unlock()
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	report, err := apply.ExecuteOperations(params)
+	assert.NoError(t, err)
+	assert.Equal(t, []string{"parent", "child"}, order)
+	assert.Len(t, report.Success.Additions, 2)
+}
+
+func TestExecuteOperations_LayeredPath_MultisetMismatch_MissingOp(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "A", New: MockRecord{ID: "A"}},
+			{Key: "B", New: MockRecord{ID: "B"}},
+		},
+		Layers: [][]types.LayerOp{
+			// Missing "B" — multiset violation.
+			{{Kind: types.LayerOpAdd, Key: "A"}},
+		},
+	}
+
+	called := false
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(types.RecordAddition[MockRecord]) error {
+			called = true
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "multiset")
+	assert.False(t, called, "no OnAdd must run when multiset check fails")
+}
+
+func TestExecuteOperations_LayeredPath_MultisetMismatch_UnknownOp(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "A", New: MockRecord{ID: "A"}},
+		},
+		Layers: [][]types.LayerOp{
+			{{Kind: types.LayerOpAdd, Key: "A"}, {Kind: types.LayerOpAdd, Key: "phantom"}},
+		},
+	}
+
+	called := false
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(types.RecordAddition[MockRecord]) error {
+			called = true
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+
+	_, err := apply.ExecuteOperations(params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown op")
+	assert.False(t, called)
+}
+
+func TestExecuteOperations_NilLayers_TakesFlatPath(t *testing.T) {
+	plan := types.Plan[MockRecord]{
+		Additions: []types.RecordAddition[MockRecord]{
+			{Key: "X", New: MockRecord{ID: "X"}},
+		},
+	}
+	called := false
+	params := apply.ExecuteOperationsParams[MockRecord]{
+		Plan:         plan,
+		FormatRecord: func(r MockRecord) string { return r.ID },
+		FormatKey:    func(k string) string { return k },
+		OnAdd: func(types.RecordAddition[MockRecord]) error {
+			called = true
+			return nil
+		},
+		OnUpdate: func(types.RecordUpdate[MockRecord]) error { return nil },
+		OnDelete: func(types.RecordDeletion[MockRecord]) error { return nil },
+	}
+	_, err := apply.ExecuteOperations(params)
+	assert.NoError(t, err)
+	assert.True(t, called)
 }

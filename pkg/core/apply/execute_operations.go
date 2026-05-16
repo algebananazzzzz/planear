@@ -139,30 +139,96 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 		}
 	}
 
-	// Execute deletions first to free up resources/identifiers before additions/updates
-	for _, del := range params.Plan.Deletions {
-		tasks = append(tasks, deleteTask(del))
-	}
-	for _, rec := range params.Plan.Additions {
-		tasks = append(tasks, addTask(rec))
-	}
-	for _, upd := range params.Plan.Updates {
-		tasks = append(tasks, updateTask(upd))
-	}
-
 	if params.Parallelization == nil {
 		defaultParallelism := runtime.NumCPU()
 		params.Parallelization = &defaultParallelism
 	}
 
-	if err := concurrency.ExecuteTasks(tasks, *params.Parallelization); err != nil {
-		return nil, fmt.Errorf("failed to complete all operations: %w", err)
+	var skipped types.Plan[T]
+
+	if params.Plan.Layers != nil {
+		// --- Layered path ---
+		if err := verifyLayersMultiset(params.Plan); err != nil {
+			return nil, err
+		}
+
+		addByKey := make(map[string]types.RecordAddition[T], len(params.Plan.Additions))
+		for _, a := range params.Plan.Additions {
+			addByKey[a.Key] = a
+		}
+		updByKey := make(map[string]types.RecordUpdate[T], len(params.Plan.Updates))
+		for _, u := range params.Plan.Updates {
+			updByKey[u.Key] = u
+		}
+		delByKey := make(map[string]types.RecordDeletion[T], len(params.Plan.Deletions))
+		for _, d := range params.Plan.Deletions {
+			delByKey[d.Key] = d
+		}
+
+		stopAfter := -1
+		for layerIdx, layer := range params.Plan.Layers {
+			layerTasks := make([]concurrency.Task, 0, len(layer))
+			for _, op := range layer {
+				switch op.Kind {
+				case types.LayerOpAdd:
+					layerTasks = append(layerTasks, addTask(addByKey[op.Key]))
+				case types.LayerOpUpdate:
+					layerTasks = append(layerTasks, updateTask(updByKey[op.Key]))
+				case types.LayerOpDelete:
+					layerTasks = append(layerTasks, deleteTask(delByKey[op.Key]))
+				default:
+					return nil, fmt.Errorf("plan.Layers unknown op kind %q at layer %d", op.Kind, layerIdx)
+				}
+			}
+
+			failBefore := len(failure.Additions) + len(failure.Updates) + len(failure.Deletions)
+			if err := concurrency.ExecuteTasks(layerTasks, *params.Parallelization); err != nil {
+				return nil, fmt.Errorf("failed to execute layer %d: %w", layerIdx, err)
+			}
+			failAfter := len(failure.Additions) + len(failure.Updates) + len(failure.Deletions)
+			if failAfter > failBefore {
+				stopAfter = layerIdx
+				break
+			}
+		}
+
+		if stopAfter >= 0 {
+			for _, layer := range params.Plan.Layers[stopAfter+1:] {
+				for _, op := range layer {
+					switch op.Kind {
+					case types.LayerOpAdd:
+						skipped.Additions = append(skipped.Additions, addByKey[op.Key])
+					case types.LayerOpUpdate:
+						skipped.Updates = append(skipped.Updates, updByKey[op.Key])
+					case types.LayerOpDelete:
+						skipped.Deletions = append(skipped.Deletions, delByKey[op.Key])
+					}
+				}
+			}
+		}
+	} else {
+		// --- Flat path (existing behavior) ---
+		// Execute deletions first to free up resources/identifiers before additions/updates
+		for _, del := range params.Plan.Deletions {
+			tasks = append(tasks, deleteTask(del))
+		}
+		for _, rec := range params.Plan.Additions {
+			tasks = append(tasks, addTask(rec))
+		}
+		for _, upd := range params.Plan.Updates {
+			tasks = append(tasks, updateTask(upd))
+		}
+
+		if err := concurrency.ExecuteTasks(tasks, *params.Parallelization); err != nil {
+			return nil, fmt.Errorf("failed to complete all operations: %w", err)
+		}
 	}
 
 	// Create report (will be printed by caller before finalization errors are reported)
 	report := &types.ExecutionReport[T]{
 		Success:             success,
 		Failure:             failure,
+		Skipped:             skipped,
 		Ignores:             params.Plan.Ignores,
 		FinalizationSuccess: true, // Default to true, set to false if finalization fails
 	}
@@ -179,4 +245,38 @@ func ExecuteOperations[T any](params ExecuteOperationsParams[T]) (*types.Executi
 	}
 
 	return report, finalizeErr
+}
+
+// verifyLayersMultiset ensures every op in plan.Additions/Updates/Deletions
+// appears exactly once in plan.Layers, and that plan.Layers does not reference
+// any op not present in the plan. Mismatches (likely from a stale or hand-edited
+// plan file) are surfaced as errors before any DB write occurs.
+func verifyLayersMultiset[T any](plan types.Plan[T]) error {
+	want := map[types.LayerOp]int{}
+	for _, a := range plan.Additions {
+		want[types.LayerOp{Kind: types.LayerOpAdd, Key: a.Key}]++
+	}
+	for _, u := range plan.Updates {
+		want[types.LayerOp{Kind: types.LayerOpUpdate, Key: u.Key}]++
+	}
+	for _, d := range plan.Deletions {
+		want[types.LayerOp{Kind: types.LayerOpDelete, Key: d.Key}]++
+	}
+	got := map[types.LayerOp]int{}
+	for _, layer := range plan.Layers {
+		for _, op := range layer {
+			got[op]++
+		}
+	}
+	for k, v := range want {
+		if got[k] != v {
+			return fmt.Errorf("plan.Layers multiset mismatch: op %+v expected %d times, found %d (plan may be stale or hand-edited)", k, v, got[k])
+		}
+	}
+	for k, v := range got {
+		if want[k] != v {
+			return fmt.Errorf("plan.Layers references unknown op %+v %d time(s)", k, v)
+		}
+	}
+	return nil
 }
