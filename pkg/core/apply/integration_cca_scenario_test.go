@@ -305,8 +305,8 @@ func TestIntegration_Restructure_AddDeleteUpdateMix(t *testing.T) {
 		// Welfare-Member-2 deleted (absent from new CSV)
 		{CCA: "JCRC", Name: "Events-Head", ReportingTo: "JCRC.President"}, // updated
 		// Events-Member-1 deleted (absent)
-		{CCA: "JCRC", Name: "Tech-Head", ReportingTo: "JCRC.Vice-President"},        // new
-		{CCA: "JCRC", Name: "Tech-Member-1", ReportingTo: "JCRC.Tech-Head"},         // new
+		{CCA: "JCRC", Name: "Tech-Head", ReportingTo: "JCRC.Vice-President"}, // new
+		{CCA: "JCRC", Name: "Tech-Member-1", ReportingTo: "JCRC.Tech-Head"},  // new
 		{CCA: "DEBATE", Name: "President", ReportingTo: ""},
 		{CCA: "DEBATE", Name: "Secretary", ReportingTo: "DEBATE.President"},
 		{CCA: "DEBATE", Name: "Member-1", ReportingTo: "DEBATE.Secretary"},
@@ -454,9 +454,9 @@ func TestIntegration_MidLayerFailure_CascadesToSkipped(t *testing.T) {
 	require.NoError(t, json.Unmarshal(planBytes, &loadedPlan))
 
 	report, execErr := apply.ExecuteOperations(apply.ExecuteOperationsParams[CCAPosition]{
-		Plan:            loadedPlan,
-		FormatRecord:    func(p CCAPosition) string { return p.Key() },
-		FormatKey:       func(k string) string { return k },
+		Plan:         loadedPlan,
+		FormatRecord: func(p CCAPosition) string { return p.Key() },
+		FormatKey:    func(k string) string { return k },
 		OnAdd: func(r types.RecordAddition[CCAPosition]) error {
 			if r.Key == "JCRC.Welfare-Head" {
 				return fmt.Errorf("injected failure for Welfare-Head")
@@ -548,9 +548,9 @@ func TestIntegration_FinalizeOnAnySuccess_RunsOnPartialFailure(t *testing.T) {
 	parallelism := 4
 
 	report, execErr := apply.ExecuteOperations(apply.ExecuteOperationsParams[CCAPosition]{
-		Plan:            loadedPlan,
-		FormatRecord:    func(p CCAPosition) string { return p.Key() },
-		FormatKey:       func(k string) string { return k },
+		Plan:         loadedPlan,
+		FormatRecord: func(p CCAPosition) string { return p.Key() },
+		FormatKey:    func(k string) string { return k },
 		OnAdd: func(r types.RecordAddition[CCAPosition]) error {
 			if r.Key == "JCRC.Welfare-Head" {
 				return fmt.Errorf("injected failure for Welfare-Head")
@@ -704,9 +704,9 @@ func TestIntegration_DeletionInversion_ChildUpdateClearsBeforeParentDelete(t *te
 	p.Layers = layers
 	parallelism := 4
 	report, err := apply.ExecuteOperations(apply.ExecuteOperationsParams[CCAPosition]{
-		Plan:            p,
-		FormatRecord:    func(pos CCAPosition) string { return pos.Key() },
-		FormatKey:       func(k string) string { return k },
+		Plan:         p,
+		FormatRecord: func(pos CCAPosition) string { return pos.Key() },
+		FormatKey:    func(k string) string { return k },
 		OnAdd: func(r types.RecordAddition[CCAPosition]) error {
 			return db.add(r.New)
 		},
