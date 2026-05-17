@@ -5,19 +5,9 @@
 [![GitHub Release](https://img.shields.io/github/v/release/algebananazzzzz/planear.svg)](https://github.com/algebananazzzzz/planear/releases)
 [![License](https://img.shields.io/github/license/algebananazzzzz/planear.svg)](LICENSE)
 
-**Planear** is a robust Go library for declarative data and infrastructure reconciliation that puts **you in complete control**. Define your desired state in CSV files, let Planear compare it with your actual remote state, and execute custom reconciliation logic **exactly the way you want it**. Unlike infrastructure-as-code tools that lock you into predefined providers, Planear gives you full customizability through simple Go code—no plugin ecosystem, no provider limitations, just pure Go.
+**Planear** reconciles a CSV-defined desired state with a remote actual state. You write `OnAdd`, `OnUpdate`, `OnDelete` in Go — Planear handles the diff, the plan file, parallel dispatch, and retries.
 
-## Features
-
-You may wonder... why is Planear created when there are tools like Terraform, Pulumi and Liquibase? Here's a detailed [comparison](./docs/COMPARISON.md) documenting the reason why I created this project!
-
-- **Complete Customizability**: Define your own record types, validation, and execution logic in pure Go
-- **Type-Safe Generics**: Handle any record type with full type safety—no type conversion or reflection overhead
-- **Declarative State Management**: CSV-driven configuration as single source of truth
-- **Custom Callbacks**: Specify `OnAdd`, `OnUpdate`, `OnDelete`, `OnFinalize`, and custom validators to implement exactly what you need
-- **Built-in Retry Logic**: Automatic exponential backoff for transient failures
-- **Parallel Execution**: Configurable concurrency (default: number of CPU cores)
-- **Comprehensive Reporting**: Track successes, failures, and ignored records with full context
+No providers, no plugins, no state-file format to learn. Just two functions.
 
 ## Installation
 
@@ -28,8 +18,6 @@ go get github.com/algebananazzzzz/planear
 ```
 
 ## Quick Start
-
-Planear has **2 simple functions**:
 
 ### 1. Generate a Plan
 
@@ -62,154 +50,56 @@ err := apply.Run(apply.RunParams[YourRecord]{
 })
 ```
 
-**That's it!** See [docs/EXAMPLES.md](./docs/EXAMPLES.md) for complete, real-world examples and patterns.
+See [examples/](./examples) for a runnable user-management example, and [docs/EXAMPLES.md](./docs/EXAMPLES.md) for patterns and additional use cases.
 
 ### Visual Overview
 
-**Step 1: Generate a Plan**
+| Step 1: Generate a Plan | Step 2: Execute the Plan |
+| --- | --- |
+| ![plan.png](./docs/plan.png) | ![apply.png](./docs/apply.png) |
 
-![plan.png](./docs/plan.png)
+## Features
 
-**Step 2: Execute the Plan**
-
-![apply.png](./docs/apply.png)
+- **Pure Go callbacks** — `OnAdd`/`OnUpdate`/`OnDelete`/`OnFinalize` are functions you write. No DSL.
+- **Type-safe generics** — works with any struct, no reflection on your records.
+- **CSV in, plan-file out** — plan is a reviewable JSON artifact written before any callback fires.
+- **Parallel execution with retries** — configurable worker pool, exponential backoff on transient failures.
+- **Optional dependency ordering** — set `DependsOn` and Planear topologically sorts the plan into layers for safe FK ordering. See [docs/LAYERED_EXECUTION.md](./docs/LAYERED_EXECUTION.md).
+- **Configurable finalize policy** — pick when `OnFinalize` runs (always / only on full success / on any progress) via `FinalizeOn`.
 
 ## How It Works
 
-### Phase 1: Plan Generation
+**Plan phase** — load CSV, call `LoadRemoteRecords`, diff the two, validate, write `plan.json`. With `DependsOn` set, also build the dependency DAG, topologically sort it into layers, and embed them in the plan. Cycles surface as errors *before* the file is written.
 
-1. **Load Local Records**: Reads CSV files from specified directory
-2. **Load Remote Records**: Fetches current state via user-provided callback
-3. **Compute Differences**: Identifies additions, updates, deletions, and ignored records
-4. **Validate Records**: Skips invalid records (collected in "Ignores")
-5. **Generate Plan**: Creates actionable plan with field-level changes
-6. **Output Plan**: Saves plan as JSON file for review before execution
+**Apply phase** — read `plan.json`, dispatch operations to a worker pool with retries. Layered mode walks layers in order with a hard barrier between them; if a layer fails, remaining layers' ops are recorded as `Skipped` rather than executed. `OnFinalize` runs subject to `FinalizeOn`.
 
-### Phase 2: Plan Execution
+## Plan Operations
 
-1. **Load Plan**: Reads the generated plan from JSON
-2. **Execute Operations**: Runs add/update/delete callbacks in parallel
-3. **Handle Failures**: Retries failed operations with exponential backoff
-4. **Generate Report**: Tracks which operations succeeded and which failed
-5. **Finalize**: Executes finalization hook (commits, cleanup, etc.)
+A plan contains:
 
-## Complete Control
-
-Define custom callbacks for **every step**:
-
-- **`OnAdd`**: Insert logic (your way)
-- **`OnUpdate`**: Update logic with field-level change visibility
-- **`OnDelete`**: Delete logic (your way)
-- **`OnFinalize`**: Commit, notify, cleanup, etc.
-
-No plugin complexity. Pure Go—no provider limitations.
-
-## Core Concepts
-
-### Plan Operations
-
-A plan contains four types of operations:
-
-- **Additions**: Keys in local CSV but not in remote state
-- **Updates**: Keys in both but with different values
-- **Deletions**: Keys in remote but not in local CSV
-- **Ignores**: Local records that failed validation
-
-### Field Changes
-
-Updates include detailed field-level changes so you know exactly what modified:
-
-```go
-type FieldChange struct {
-    Field    string // Name of changed field
-    OldValue any    // Previous value
-    NewValue any    // New value
-}
-```
-
-## Two Simple Entry Points
-
-Planear is **very straightforward**—just two functions:
-
-1. **`plan.Generate()`** - Compare CSV with remote state, generate a plan
-2. **`apply.Run()`** - Execute the plan with your custom callbacks
-
-That's it. No complex APIs, no provider ecosystem, no state management complexity.
-
-## Learn by Example
-
-See [docs/EXAMPLES.md](./docs/EXAMPLES.md) for:
-- The built-in example (user management system)
-- Real-world use cases (LDAP sync, roles/permissions, multi-tenant config, API endpoints)
-- Common patterns and advanced usage
-- Testing strategies
-
-## Documentation
-
-- [docs/EXAMPLES.md](./docs/EXAMPLES.md) - Usage patterns, real-world scenarios, and best practices
-- [docs/COMPARISON.md](./docs/COMPARISON.md) - How Planear compares to Terraform, Pulumi, Liquibase
-- [CONTRIBUTING.md](./CONTRIBUTING.md) - How to contribute
-- [docs/RELEASING.md](./docs/RELEASING.md) - How to create releases (automatic via GitHub Actions)
-
-## Use Cases
-
-Planear is ideal for:
-
-- **Database Manipulation Language (DML) Management**: Keep database items in sync with CSV definitions
-- **User/Permission Management**: Manage users and roles declaratively
-- **Configuration Synchronization**: Sync local config files with remote services
-- **Data Migration**: Migrate data between systems safely
-- **Infrastructure Reconciliation**: Any scenario where you need to reconcile local desired state with remote actual state using custom scripts
-
-## Why Planear?
-
-| Aspect | Planear | Terraform | Custom Scripts |
-|--------|---------|-----------|-----------------|
-| **Custom Logic** | 100% control via callbacks | Limited by providers | Full control, lots of boilerplate |
-| **Declarative + Plan First** | ✅ CSV-driven | ✅ HCL-driven | ❌ Imperative |
-| **Type Safety** | ✅ Full Go generics | ❌ Dynamic HCL | ✅ Go type system |
-| **Parallel + Retries** | ✅ Built-in | Partial | ❌ Manual |
-| **CSV Support** | ✅ First-class | ❌ Not designed | ❌ Not designed |
-| **Ease of Use** | Simple (2 functions) | Complex | High effort |
-
-**See [docs/COMPARISON.md](./docs/COMPARISON.md) for detailed comparisons with Terraform, Pulumi, Liquibase, and custom scripts.**
+- **Additions** — keys in local CSV but not in remote state
+- **Updates** — keys in both but with different values (includes per-field `OldValue`/`NewValue`)
+- **Deletions** — keys in remote but not in local CSV
+- **Ignores** — local records that failed validation, with the reason
+- **Layers** *(optional)* — populated when `DependsOn` is provided
 
 ## Performance
 
-- **Parallel Execution**: Configurable worker pool for concurrent operations. Recommendation: Set parallelization to `runtime.NumCPU()` for optimal throughput
-- **Efficient Diffing**: O(n+m) algorithm for comparing local vs remote state
-- **Streaming CSV**: Handles large CSV files with streaming parser
-- **Low Latency**: Pure Go implementation with minimal allocations
-- **Example parallelization**:
-  ```go
-  import "runtime"
+Set `Parallelization` to `runtime.NumCPU()` for CPU-bound callbacks, higher for network-bound ones:
 
-  numCores := runtime.NumCPU()
-  params.Parallelization = &numCores
-  ```
-
-## Error Handling
-
-Planear provides comprehensive error reporting:
-
-- **Validation Errors**: Records failing validation are marked as ignored with reason
-- **Execution Errors**: Failed operations are tracked separately for retry/debugging
-- **Detailed Messages**: All errors include context (which record, which operation, etc.)
-
-## Testing
-
-```bash
-go test ./...
+```go
+numCores := runtime.NumCPU()
+params.Parallelization = &numCores
 ```
+
+## Documentation
+
+- [docs/EXAMPLES.md](./docs/EXAMPLES.md) — usage patterns and additional scenarios
+- [docs/LAYERED_EXECUTION.md](./docs/LAYERED_EXECUTION.md) — dependency-aware layering deep dive
+- [docs/COMPARISON.md](./docs/COMPARISON.md) — how Planear compares to Terraform, Pulumi, Liquibase
+- [docs/TESTING.md](./docs/TESTING.md) — running tests, `testutils/` helpers
+- [docs/RELEASING.md](./docs/RELEASING.md) — how releases are cut
 
 ## License
 
-[LICENSE.md](./LICENSE.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](./CONTRIBUTING.md) for guidelines on how to contribute.
-
-## Support
-
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/algebananazzzzz/planear).
+[MIT](./LICENSE)
