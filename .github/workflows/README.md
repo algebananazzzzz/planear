@@ -116,6 +116,5 @@ To modify the workflow:
 
 ## Related Files
 
-- `TESTING.md` - Comprehensive testing guide
-- `CONTRIBUTING.md` - Development guidelines
+- [`docs/TESTING.md`](../../docs/TESTING.md) - Testing guide
 - `go.mod` / `go.sum` - Dependency management
