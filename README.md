@@ -5,9 +5,7 @@
 [![GitHub Release](https://img.shields.io/github/v/release/algebananazzzzz/planear.svg)](https://github.com/algebananazzzzz/planear/releases)
 [![License](https://img.shields.io/github/license/algebananazzzzz/planear.svg)](LICENSE)
 
-**Planear** reconciles a CSV-defined desired state with a remote actual state. You write `OnAdd`, `OnUpdate`, `OnDelete` in Go — Planear handles the diff, the plan file, parallel dispatch, and retries.
-
-No providers, no plugins, no state-file format to learn. Just two functions.
+Planear provides a simple interface to reconcile desired state defined in CSV with the actual state of live systems. Developers write custom handlers, and Planear handles state drift detection, planning and retries. While traditional state reconciliation engines refresh each resource's state separately and build the dependency graph resource by resource, Planear loads actual state in bulk, builds a dependency DAG across thousands of rows, and executes each layer in parallel on a goroutine worker pool. It prioritizes simplicity and performance, eliminating the concepts of providers, plugins and state files, and instead focuses on a simple interface easily extended in Go for custom use cases.
 
 ## Installation
 
